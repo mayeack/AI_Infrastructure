@@ -1,0 +1,492 @@
+<dashboard version="2" theme="dark">
+<label>Model Performance and Quality</label>
+<description>Production quality scores and evaluation evidence by model and version, self-hosted and provider APIs</description>
+<definition><![CDATA[{
+ "title": "Model Performance and Quality",
+ "description": "Production quality scores and evaluation evidence by model and version, self-hosted and provider APIs",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-24h,now"
+   }
+  },
+  "input_model": {
+   "type": "input.multiselect",
+   "title": "Model",
+   "options": {
+    "token": "model",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.model",
+    "label": "primary.model"
+   },
+   "dataSources": {
+    "primary": "ds_models"
+   }
+  },
+  "input_version": {
+   "type": "input.text",
+   "title": "Version filter",
+   "options": {
+    "token": "version",
+    "defaultValue": "*"
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_models": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_requests` | stats count BY gen_ai.request.model | rename gen_ai.request.model AS model | fields model",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Models"
+  },
+  "ds_kpi_safety": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_safety_compliance($model$)`"
+   },
+   "name": "Safety Compliance"
+  },
+  "ds_kpi_groundedness": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_groundedness($model$)`"
+   },
+   "name": "Groundedness"
+  },
+  "ds_kpi_halluc": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_hallucination_rate($model$)`"
+   },
+   "name": "Hallucination Rate"
+  },
+  "ds_kpi_drift": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_score_drift`"
+   },
+   "name": "Score Drift vs Baseline"
+  },
+  "ds_kpi_cycle": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_eval_cycle_time`",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Evaluation Cycle Time"
+  },
+  "ds_halluc_rate": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_requests` gen_ai.request.model IN ($model$) gen_ai.system=self-hosted | eval h=coalesce(hallucination_count, 'quality.hallucination_flag'*request_count), model='gen_ai.request.model' | bin _time span=15m | stats sum(h) AS h sum(request_count) AS n BY _time model | eval rate=round(1000*h/n,1) | `ai_hallucination_band` | eventstats max(rate) AS model_max BY model | eventstats max(model_max) AS fleet_max | eval rows=mvappend(model.\"|\".rate, if(model_max=fleet_max,\"band_upper|\".band_upper,null())) | mvexpand rows | rex field=rows \"^(?<series>[^|]+)\\|(?<val>.*)$\" | timechart span=15m latest(val) BY series useother=f limit=0"
+   },
+   "name": "Hallucination Flags per 1,000 Responses"
+  },
+  "ds_incident_annot": {
+   "type": "ds.search",
+   "options": {
+    "query": "| makeresults | eval day=if(now()<relative_time(now(),\"@d+13h\"),relative_time(now(),\"@d-1d\"),relative_time(now(),\"@d\")) | eval t=mvappend(tostring(day+13*3600), tostring(day+15*3600)) | mvexpand t | eval t=tonumber(t), _time=t, label=if(t=day+13*3600,\"Incident window start\",\"Incident window end\"), color=\"#E0453A\" | table _time label color"
+   },
+   "name": "Incident window"
+  },
+  "ds_pass_rate": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_eval_runs` model_version IN ($model$) suite IN (\"safety\",\"reasoning\",\"coding\") version IN (\"v37\",\"v38\",\"v39\",\"v40\",\"v41\") | stats latest(pass_rate) AS pass_rate BY version suite | xyseries version suite pass_rate | rename version AS model_version | table model_version safety reasoning coding",
+    "queryParameters": {
+     "earliest": "-90d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Evaluation Pass Rate by Suite and Version (%)"
+  },
+  "ds_eval_table": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_eval_runs` model_version IN ($model$) version=\"$version$\" | eval rank=case(status=\"regression\",0,status=\"watch\",1,true(),2) | sort 0 rank -_time | fields - rank | head 25 | eval _time=strftime(_time,\"%Y-%m-%d %H:%M:%S.%3N\") | table _time model_version suite pass_rate delta_vs_baseline status evidence"
+   },
+   "name": "Recent Evaluation Runs"
+  }
+ },
+ "visualizations": {
+  "viz_kpi_safety": {
+   "type": "splunk.singlevalue",
+   "title": "Safety Compliance",
+   "dataSources": {
+    "primary": "ds_kpi_safety"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 99,
+      "value": "#E0453A"
+     },
+     {
+      "from": 99,
+      "value": "#53A051"
+     }
+    ]
+   }
+  },
+  "viz_kpi_groundedness": {
+   "type": "splunk.singlevalue",
+   "title": "Groundedness",
+   "dataSources": {
+    "primary": "ds_kpi_groundedness"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF",
+    "unit": "%",
+    "unitPosition": "after"
+   }
+  },
+  "viz_kpi_halluc": {
+   "type": "splunk.singlevalue",
+   "title": "Hallucination Rate",
+   "dataSources": {
+    "primary": "ds_kpi_halluc"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1.5,
+      "value": "#53A051"
+     },
+     {
+      "from": 1.5,
+      "to": 3,
+      "value": "#F1813F"
+     },
+     {
+      "from": 3,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_drift": {
+   "type": "splunk.singlevalue",
+   "title": "Score Drift vs Baseline",
+   "dataSources": {
+    "primary": "ds_kpi_drift"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "pts",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": -2,
+      "value": "#E0453A"
+     },
+     {
+      "from": -2,
+      "to": -1,
+      "value": "#F8BE34"
+     },
+     {
+      "from": -1,
+      "value": "#53A051"
+     }
+    ]
+   }
+  },
+  "viz_kpi_cycle": {
+   "type": "splunk.singlevalue",
+   "title": "Evaluation Cycle Time",
+   "dataSources": {
+    "primary": "ds_kpi_cycle"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF",
+    "unit": "h",
+    "unitPosition": "after"
+   }
+  },
+  "viz_halluc_rate": {
+   "type": "splunk.line",
+   "title": "Hallucination Flags per 1,000 Responses",
+   "dataSources": {
+    "primary": "ds_halluc_rate",
+    "annotations": "ds_incident_annot"
+   },
+   "options": {
+    "legendDisplay": "bottom",
+    "lineWidth": 2,
+    "nullValueDisplay": "connect",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "flags per 1,000",
+    "seriesColorsByField": {
+     "band_upper": "#7F8A95",
+     "med-advisor-v41": "#7B56DB",
+     "claims-v12": "#009CEB",
+     "coder-v9": "#00CDAF",
+     "rag-embed-v7": "#DD9900"
+    },
+    "yAxisMin": 0,
+    "annotationX": "> annotations | seriesByIndex(0)",
+    "annotationLabel": "> annotations | seriesByIndex(1)",
+    "annotationColor": "> annotations | seriesByIndex(2)"
+   }
+  },
+  "viz_pass_rate": {
+   "type": "splunk.column",
+   "title": "Evaluation Pass Rate by Suite and Version (%)",
+   "dataSources": {
+    "primary": "ds_pass_rate"
+   },
+   "options": {
+    "stackMode": "auto",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "model_version",
+    "yAxisTitleText": "%",
+    "seriesColorsByField": {
+     "safety": "#00CDAF",
+     "reasoning": "#7B56DB",
+     "coding": "#DD9900"
+    },
+    "yAxisMin": 80,
+    "yAxisMax": 100
+   }
+  },
+  "viz_eval_table": {
+   "type": "splunk.table",
+   "title": "Recent Evaluation Runs",
+   "dataSources": {
+    "primary": "ds_eval_table"
+   },
+   "options": {
+    "count": 25,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "status": {
+      "rowColors": "> table | seriesByName('status') | matchValue(statusCfg)"
+     },
+     "delta_vs_baseline": {
+      "rowColors": "> table | seriesByName('delta_vs_baseline') | rangeValue(deltaCfg)",
+      "align": "right",
+      "width": 140
+     },
+     "pass_rate": {
+      "align": "right",
+      "width": 100
+     }
+    }
+   },
+   "context": {
+    "statusCfg": [
+     {
+      "match": "regression",
+      "value": "#E0453A"
+     },
+     {
+      "match": "watch",
+      "value": "#F8BE34"
+     },
+     {
+      "match": "within_band",
+      "value": "#53A051"
+     },
+     {
+      "match": "improved",
+      "value": "#53A051"
+     }
+    ],
+    "deltaCfg": [
+     {
+      "to": -2,
+      "value": "#E0453A"
+     },
+     {
+      "from": -2,
+      "to": 0,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 0,
+      "value": "#53A051"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToSearch",
+     "options": {
+      "search": "(`ai_eval_runs` evidence=\"$row.evidence.value$\") OR (`ai_job_lifecycle` job_id=\"$row.evidence.value$\") | table _time sourcetype job_id model_version suite pass_rate baseline_pass_rate delta_vs_baseline status state node gpu_hours queue_wait_s | sort 0 _time",
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$",
+      "openInNewTab": true
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 850,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_model",
+   "input_version"
+  ],
+  "structure": [
+   {
+    "item": "viz_kpi_safety",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_groundedness",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_halluc",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_drift",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_cycle",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_halluc_rate",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_pass_rate",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_eval_table",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 450,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}]]></definition>
+</dashboard>

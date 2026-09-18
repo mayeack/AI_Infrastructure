@@ -1,0 +1,518 @@
+<dashboard version="2" theme="dark">
+<label>AI Applications</label>
+<description>Requests, latency, retrieval, tokens, cost and guardrail activity across AI applications, correlated by trace ID</description>
+<definition><![CDATA[
+{
+ "title": "AI Applications",
+ "description": "Requests, latency, retrieval, tokens, cost and guardrail activity across AI applications, correlated by trace ID",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-24h,now"
+   }
+  },
+  "input_app": {
+   "type": "input.multiselect",
+   "title": "Application",
+   "options": {
+    "token": "app",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.app",
+    "label": "primary.app"
+   },
+   "dataSources": {
+    "primary": "ds_apps"
+   }
+  },
+  "input_model": {
+   "type": "input.multiselect",
+   "title": "Model",
+   "options": {
+    "token": "model",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.model",
+    "label": "primary.model"
+   },
+   "dataSources": {
+    "primary": "ds_models"
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_apps": {
+   "type": "ds.search",
+   "options": {
+    "query": "| inputlookup ai_application_catalog | rename gen_ai.app AS app | stats count BY app | fields app",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Applications"
+  },
+  "ds_models": {
+   "type": "ds.search",
+   "options": {
+    "query": "| inputlookup ai_application_catalog | stats count BY model | fields model",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Models"
+  },
+  "ds_kpi_requests": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_requests($app$,$model$)`"
+   },
+   "name": "Requests"
+  },
+  "ds_kpi_availability": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_availability($app$,$model$)`"
+   },
+   "name": "Availability"
+  },
+  "ds_kpi_ttft": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_p95_ttft($app$,$model$)`"
+   },
+   "name": "p95 Time-to-First-Token"
+  },
+  "ds_kpi_spend": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_token_spend($app$,$model$)`"
+   },
+   "name": "Token Spend (24h)"
+  },
+  "ds_kpi_guardrails": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_guardrails_triggered($app$)`"
+   },
+   "name": "Guardrails Triggered"
+  },
+  "ds_ttft": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_requests` gen_ai.app IN ($app$) gen_ai.request.model IN ($model$) | timechart span=15m perc50(ttft_ms) AS p50 perc95(ttft_ms) AS p95 | foreach p50 p95 [eval <<FIELD>>=round('<<FIELD>>',0)]"
+   },
+   "name": "Time-to-First-Token (ms)"
+  },
+  "ds_incident_annot": {
+   "type": "ds.search",
+   "options": {
+    "query": "| makeresults | eval day=if(now()<relative_time(now(),\"@d+13h\"),relative_time(now(),\"@d-1d\"),relative_time(now(),\"@d\")) | eval t=mvappend(tostring(day+13*3600), tostring(day+15*3600)) | mvexpand t | eval t=tonumber(t), _time=t, label=if(t=day+13*3600,\"Incident window start\",\"Incident window end\"), color=\"#E0453A\" | table _time label color"
+   },
+   "name": "Incident window"
+  },
+  "ds_tokens_by_app": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_requests` gen_ai.app IN ($app$) gen_ai.request.model IN ($model$) | eval tok=('gen_ai.usage.input_tokens'+'gen_ai.usage.output_tokens')/1000000 | timechart span=1h sum(tok) BY gen_ai.app | foreach * [eval <<FIELD>>=round('<<FIELD>>',1)]"
+   },
+   "name": "Token Usage by Application (millions)"
+  },
+  "ds_requests_table": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_requests` gen_ai.app IN ($app$) gen_ai.request.model IN ($model$) row_kind=detail | eval retrieval_ms=coalesce(retrieval_ms,\"-\"), rank=if(guardrail!=\"pass\" OR retrieval_ms=\"timeout\" OR status!=\"ok\",0,1) | sort 0 rank -_time | fields - rank | head 50 | eval _time=strftime(_time,\"%Y-%m-%d %H:%M:%S.%3N\") | table _time gen_ai.app gen_ai.request.model trace_id ttft_ms retrieval_ms guardrail"
+   },
+   "name": "Recent AI Requests (Detailed Log)"
+  }
+ },
+ "visualizations": {
+  "viz_kpi_requests": {
+   "type": "splunk.singlevalue",
+   "title": "Requests",
+   "dataSources": {
+    "primary": "ds_kpi_requests"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF",
+    "shouldAbbreviateMajorValue": true
+   }
+  },
+  "viz_kpi_availability": {
+   "type": "splunk.singlevalue",
+   "title": "Availability",
+   "dataSources": {
+    "primary": "ds_kpi_availability"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 2,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 99.5,
+      "value": "#E0453A"
+     },
+     {
+      "from": 99.5,
+      "to": 99.9,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 99.9,
+      "value": "#53A051"
+     }
+    ]
+   }
+  },
+  "viz_kpi_ttft": {
+   "type": "splunk.singlevalue",
+   "title": "p95 Time-to-First-Token",
+   "dataSources": {
+    "primary": "ds_kpi_ttft"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "ms",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 600,
+      "value": "#53A051"
+     },
+     {
+      "from": 600,
+      "to": 1200,
+      "value": "#F1813F"
+     },
+     {
+      "from": 1200,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_spend": {
+   "type": "splunk.singlevalue",
+   "title": "Token Spend (24h)",
+   "dataSources": {
+    "primary": "ds_kpi_spend"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF",
+    "unit": "$",
+    "unitPosition": "before",
+    "shouldAbbreviateMajorValue": true
+   }
+  },
+  "viz_kpi_guardrails": {
+   "type": "splunk.singlevalue",
+   "title": "Guardrails Triggered",
+   "dataSources": {
+    "primary": "ds_kpi_guardrails"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 500,
+      "value": "#53A051"
+     },
+     {
+      "from": 500,
+      "to": 1000,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 1000,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_ttft": {
+   "type": "splunk.line",
+   "title": "Time-to-First-Token (ms)",
+   "dataSources": {
+    "primary": "ds_ttft",
+    "annotations": "ds_incident_annot"
+   },
+   "options": {
+    "legendDisplay": "bottom",
+    "lineWidth": 2,
+    "nullValueDisplay": "connect",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "ms",
+    "seriesColors": [
+     "#009CEB",
+     "#FF677B"
+    ],
+    "yAxisMin": 0,
+    "annotationX": "> annotations | seriesByIndex(0)",
+    "annotationLabel": "> annotations | seriesByIndex(1)",
+    "annotationColor": "> annotations | seriesByIndex(2)"
+   }
+  },
+  "viz_tokens_by_app": {
+   "type": "splunk.column",
+   "title": "Token Usage by Application (millions)",
+   "dataSources": {
+    "primary": "ds_tokens_by_app"
+   },
+   "options": {
+    "stackMode": "stacked",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "millions of tokens",
+    "seriesColorsByField": {
+     "medadvice-chat": "#7B56DB",
+     "claims-agent": "#009CEB",
+     "search-rag": "#00CDAF",
+     "code-assist": "#DD9900",
+     "med-advisor-v40-canary": "#FF677B",
+     "provider-api-large": "#CB2196"
+    }
+   }
+  },
+  "viz_requests_table": {
+   "type": "splunk.table",
+   "title": "Recent AI Requests (Detailed Log)",
+   "dataSources": {
+    "primary": "ds_requests_table"
+   },
+   "options": {
+    "count": 50,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "ttft_ms": {
+      "rowColors": "> table | seriesByName('ttft_ms') | rangeValue(ttftCfg)",
+      "align": "right",
+      "width": 100
+     },
+     "retrieval_ms": {
+      "rowColors": "> table | seriesByName('retrieval_ms') | matchValue(retrCfg)",
+      "align": "right",
+      "width": 120
+     },
+     "guardrail": {
+      "rowColors": "> table | seriesByName('guardrail') | matchValue(grCfg)"
+     }
+    }
+   },
+   "context": {
+    "ttftCfg": [
+     {
+      "to": 600,
+      "value": "#FFFFFF"
+     },
+     {
+      "from": 600,
+      "to": 1200,
+      "value": "#F1813F"
+     },
+     {
+      "from": 1200,
+      "value": "#E0453A"
+     }
+    ],
+    "retrCfg": [
+     {
+      "match": "timeout",
+      "value": "#E0453A"
+     }
+    ],
+    "grCfg": [
+     {
+      "match": "pass",
+      "value": "#53A051"
+     },
+     {
+      "match": "flagged:hallucination",
+      "value": "#F1813F"
+     },
+     {
+      "match": "blocked:prompt_injection",
+      "value": "#E0453A"
+     },
+     {
+      "match": "blocked:pii",
+      "value": "#E0453A"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToSearch",
+     "options": {
+      "search": "`ai_gen_ai_idx` trace_id=\"$row.trace_id.value$\" | table _time sourcetype gen_ai.app gen_ai.request.model gen_ai.agent.name gen_ai.tool.name ttft_ms retrieval_ms guardrail verdict category status | sort 0 _time",
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$",
+      "openInNewTab": true
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 850,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_app",
+   "input_model"
+  ],
+  "structure": [
+   {
+    "item": "viz_kpi_requests",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_availability",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_ttft",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_spend",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_guardrails",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_ttft",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_tokens_by_app",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_requests_table",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 450,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>

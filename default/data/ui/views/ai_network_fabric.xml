@@ -1,0 +1,465 @@
+<dashboard version="2" theme="dark">
+<label>AI Network Fabric</label>
+<description>Cisco Nexus fabric health, congestion and path performance for AI PODs and the model APIs they call</description>
+<definition><![CDATA[
+{
+ "title": "AI Network Fabric",
+ "description": "Cisco Nexus fabric health, congestion and path performance for AI PODs and the model APIs they call",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-24h,now"
+   }
+  },
+  "input_fabric": {
+   "type": "input.multiselect",
+   "title": "Fabric",
+   "options": {
+    "token": "fabric",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.ai_pod",
+    "label": "primary.ai_pod"
+   },
+   "dataSources": {
+    "primary": "ds_fabrics"
+   }
+  },
+  "input_device": {
+   "type": "input.text",
+   "title": "Device filter",
+   "options": {
+    "token": "device",
+    "defaultValue": "*"
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_fabrics": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_nexus_anomaly` | stats count BY ai_pod | fields ai_pod",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Fabrics"
+  },
+  "ds_kpi_links": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_fabric_links($fabric$)`"
+   },
+   "name": "Fabric Links Monitored"
+  },
+  "ds_kpi_congested": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_congested_links($fabric$)`"
+   },
+   "name": "Congested Links"
+  },
+  "ds_kpi_pfc": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_pfc_pause_frames($fabric$)`"
+   },
+   "name": "PFC Pause Frames (24h)"
+  },
+  "ds_kpi_flaps": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_link_flaps($fabric$)`"
+   },
+   "name": "Link Flaps"
+  },
+  "ds_kpi_latency": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_p95_model_api_latency`"
+   },
+   "name": "p95 Latency to Model APIs"
+  },
+  "ds_throughput": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_nexus_interface` ai_pod IN ($fabric$) device=\"$device$\" | eval gbps=(in_util_pct+out_util_pct)/200*coalesce(speed_gbps,400) | timechart span=1h sum(gbps) AS gbps BY ai_pod | foreach aipod-* [eval <<FIELD>>=round('<<FIELD>>',1)]"
+   },
+   "name": "East-West Fabric Throughput by AI POD (Gbps)"
+  },
+  "ds_anomalies": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_nexus_anomaly` ai_pod IN ($fabric$) device=\"$device$\" anomaly IN (\"congestion\",\"pfc_pause_storm\",\"link_flap\",\"crc_errors\") | timechart span=1h count BY anomaly | table _time congestion pfc_pause_storm link_flap crc_errors"
+   },
+   "name": "Nexus Fabric Anomalies by Type"
+  },
+  "ds_links_table": {
+   "type": "ds.search",
+   "options": {
+    "query": "((`ai_nexus_anomaly`) OR (`ai_nexus_config`) OR (`ai_path_test` slow_hop=*)) ai_pod IN ($fabric$) device=\"$device$\" | eval device=coalesce(device,probe), interface=coalesce(interface,if(sourcetype=\"ai:path:test\",\"path\",\"-\")), peer=coalesce(peer,target,\"-\"), anomaly=case(sourcetype=\"cisco:nexus:config\",\"config change: \".change, sourcetype=\"ai:path:test\",\"latency +\".slow_hop_delta_ms.\" ms at hop \".slow_hop, anomaly=\"link_flap\",\"link_flap x\".coalesce(flap_count,1).\" in 10 min\", anomaly=\"crc_errors\",\"crc_errors rising\", true(),anomaly), utilization=if(isnull(utilization),\"-\",utilization.\"%\"), source=coalesce(mvfilter(match(source,\"^(nexus|path_test)$\")),\"nexus\"), rank=case(severity IN (\"critical\",\"high\"),0,severity==\"medium\",1,true(),2) | sort 0 rank -_time | fields - rank | head 25 | eval _time=strftime(_time,\"%Y-%m-%d %H:%M:%S.%3N\") | table _time device interface peer anomaly utilization source severity"
+   },
+   "name": "Links and Paths Needing Attention"
+  }
+ },
+ "visualizations": {
+  "viz_kpi_links": {
+   "type": "splunk.singlevalue",
+   "title": "Fabric Links Monitored",
+   "dataSources": {
+    "primary": "ds_kpi_links"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF"
+   }
+  },
+  "viz_kpi_congested": {
+   "type": "splunk.singlevalue",
+   "title": "Congested Links",
+   "dataSources": {
+    "primary": "ds_kpi_congested"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "to": 10,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 10,
+      "value": "#F1813F"
+     }
+    ]
+   }
+  },
+  "viz_kpi_pfc": {
+   "type": "splunk.singlevalue",
+   "title": "PFC Pause Frames (24h)",
+   "dataSources": {
+    "primary": "ds_kpi_pfc"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "shouldAbbreviateMajorValue": true
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1000,
+      "value": "#53A051"
+     },
+     {
+      "from": 1000,
+      "to": 10000,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 10000,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_flaps": {
+   "type": "splunk.singlevalue",
+   "title": "Link Flaps",
+   "dataSources": {
+    "primary": "ds_kpi_flaps"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "to": 5,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 5,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_latency": {
+   "type": "splunk.singlevalue",
+   "title": "p95 Latency to Model APIs",
+   "dataSources": {
+    "primary": "ds_kpi_latency"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "ms",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 250,
+      "value": "#FFFFFF"
+     },
+     {
+      "from": 250,
+      "value": "#F1813F"
+     }
+    ]
+   }
+  },
+  "viz_throughput": {
+   "type": "splunk.line",
+   "title": "East-West Fabric Throughput by AI POD (Gbps)",
+   "dataSources": {
+    "primary": "ds_throughput"
+   },
+   "options": {
+    "legendDisplay": "bottom",
+    "lineWidth": 2,
+    "nullValueDisplay": "connect",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "Gbps",
+    "seriesColors": [
+     "#7B56DB",
+     "#009CEB",
+     "#00CDAF"
+    ],
+    "yAxisMin": 0
+   }
+  },
+  "viz_anomalies": {
+   "type": "splunk.column",
+   "title": "Nexus Fabric Anomalies by Type",
+   "dataSources": {
+    "primary": "ds_anomalies"
+   },
+   "options": {
+    "stackMode": "stacked",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "anomalies",
+    "seriesColorsByField": {
+     "congestion": "#DD9900",
+     "pfc_pause_storm": "#CB2196",
+     "link_flap": "#7B56DB",
+     "crc_errors": "#00CDAF"
+    }
+   }
+  },
+  "viz_links_table": {
+   "type": "splunk.table",
+   "title": "Links and Paths Needing Attention",
+   "dataSources": {
+    "primary": "ds_links_table"
+   },
+   "options": {
+    "count": 25,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "anomaly": {
+      "rowColors": "> table | seriesByName('severity') | matchValue(sevCfg)"
+     },
+     "utilization": {
+      "align": "right",
+      "width": 110
+     },
+     "severity": {
+      "width": 90
+     }
+    }
+   },
+   "context": {
+    "sevCfg": [
+     {
+      "match": "critical",
+      "value": "#E0453A"
+     },
+     {
+      "match": "high",
+      "value": "#E0453A"
+     },
+     {
+      "match": "medium",
+      "value": "#F1813F"
+     },
+     {
+      "match": "low",
+      "value": "#F8BE34"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToSearch",
+     "options": {
+      "search": "`ai_network_idx` \"$row.device.value$\" (\"$row.interface.value$\" OR \"$row.peer.value$\") | table _time sourcetype device interface peer anomaly change user utilization link_state pfc_pause_rx ecn_marked_packets latency_ms | sort 0 _time",
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$",
+      "openInNewTab": true
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 850,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_fabric",
+   "input_device"
+  ],
+  "structure": [
+   {
+    "item": "viz_kpi_links",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_congested",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_pfc",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_flaps",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_latency",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_throughput",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_anomalies",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_links_table",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 450,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>

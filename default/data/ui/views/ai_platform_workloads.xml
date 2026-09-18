@@ -1,0 +1,479 @@
+<dashboard version="2" theme="dark">
+<label>AI Platform and Workloads</label>
+<description>Kubernetes, inference serving and job health across AI PODs: services first, with the evaluation and fine-tuning jobs behind them</description>
+<definition><![CDATA[
+{
+ "title": "AI Platform and Workloads",
+ "description": "Kubernetes, inference serving and job health across AI PODs: services first, with the evaluation and fine-tuning jobs behind them",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-24h,now"
+   }
+  },
+  "input_ns": {
+   "type": "input.multiselect",
+   "title": "Namespace",
+   "options": {
+    "token": "ns",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.namespace",
+    "label": "primary.namespace"
+   },
+   "dataSources": {
+    "primary": "ds_namespaces"
+   }
+  },
+  "input_workload": {
+   "type": "input.text",
+   "title": "Workload filter",
+   "options": {
+    "token": "workload",
+    "defaultValue": "*"
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_namespaces": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kube_events` | stats count BY namespace | fields namespace",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Namespaces"
+  },
+  "ds_kpi_replicas": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_inference_replicas`"
+   },
+   "name": "Inference Replicas Running"
+  },
+  "ds_kpi_restarts": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_pod_restarts($ns$,$workload$)`"
+   },
+   "name": "Pod Restarts (24h)"
+  },
+  "ds_kpi_pending": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_pending_gpu_pods`"
+   },
+   "name": "Pending GPU Pods"
+  },
+  "ds_kpi_queue": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_p95_queue_time`"
+   },
+   "name": "p95 Queue Time"
+  },
+  "ds_kpi_failed": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_failed_jobs_7d`",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Failed Jobs (7d)"
+  },
+  "ds_restarts_by_reason": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kube_events` namespace IN ($ns$) workload=\"$workload$\" reason IN (\"OOMKilled\",\"NodeNotReady\",\"CrashLoopBackOff\",\"Evicted\") | timechart span=1h sum(restart_count) BY reason | table _time OOMKilled NodeNotReady CrashLoopBackOff Evicted"
+   },
+   "name": "Pod Restarts by Reason"
+  },
+  "ds_queue_depth": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_inference_server` model_server=\"$workload$\" | timechart span=1h avg(queue_depth) BY model_server | foreach * [eval <<FIELD>>=round('<<FIELD>>',1)]"
+   },
+   "name": "Inference Queue Depth by Model Server"
+  },
+  "ds_failures_table": {
+   "type": "ds.search",
+   "options": {
+    "query": "((`ai_kube_events` reason IN (\"OOMKilled\",\"NodeNotReady\",\"CrashLoopBackOff\",\"Evicted\",\"SlowQueries\") OR (`ai_kube_events` kind=\"data service\")) OR (`ai_job_lifecycle` state IN (\"failed\",\"preempted\",\"retrying\"))) namespace IN ($ns$) workload=\"$workload$\" | eval workload=coalesce(pod,job_id,workload), reason=coalesce(reason,state), impact=coalesce(impact,message,\"-\"), x=1 | dedup workload reason sortby +_time | eval rank=case(severity IN (\"critical\",\"high\"),0,severity==\"medium\",1,true(),2) | sort 0 rank -_time | fields - rank | head 25 | eval _time=strftime(_time,\"%Y-%m-%d %H:%M:%S.%3N\") | table _time workload kind namespace node reason impact"
+   },
+   "name": "Recent Workload Failures"
+  }
+ },
+ "visualizations": {
+  "viz_kpi_replicas": {
+   "type": "splunk.singlevalue",
+   "title": "Inference Replicas Running",
+   "dataSources": {
+    "primary": "ds_kpi_replicas"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF"
+   }
+  },
+  "viz_kpi_restarts": {
+   "type": "splunk.singlevalue",
+   "title": "Pod Restarts (24h)",
+   "dataSources": {
+    "primary": "ds_kpi_restarts"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 10,
+      "value": "#53A051"
+     },
+     {
+      "from": 10,
+      "to": 25,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 25,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_pending": {
+   "type": "splunk.singlevalue",
+   "title": "Pending GPU Pods",
+   "dataSources": {
+    "primary": "ds_kpi_pending"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "to": 5,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 5,
+      "value": "#F1813F"
+     }
+    ]
+   }
+  },
+  "viz_kpi_queue": {
+   "type": "splunk.singlevalue",
+   "title": "p95 Queue Time",
+   "dataSources": {
+    "primary": "ds_kpi_queue"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "s",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 0.5,
+      "value": "#53A051"
+     },
+     {
+      "from": 0.5,
+      "to": 1,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 1,
+      "to": 3,
+      "value": "#F1813F"
+     },
+     {
+      "from": 3,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_failed": {
+   "type": "splunk.singlevalue",
+   "title": "Failed Jobs (7d)",
+   "dataSources": {
+    "primary": "ds_kpi_failed"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF"
+   }
+  },
+  "viz_restarts_by_reason": {
+   "type": "splunk.column",
+   "title": "Pod Restarts by Reason",
+   "dataSources": {
+    "primary": "ds_restarts_by_reason"
+   },
+   "options": {
+    "stackMode": "stacked",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "restarts",
+    "seriesColorsByField": {
+     "OOMKilled": "#CB2196",
+     "NodeNotReady": "#7B56DB",
+     "CrashLoopBackOff": "#DD9900",
+     "Evicted": "#00CDAF"
+    }
+   }
+  },
+  "viz_queue_depth": {
+   "type": "splunk.line",
+   "title": "Inference Queue Depth by Model Server",
+   "dataSources": {
+    "primary": "ds_queue_depth"
+   },
+   "options": {
+    "legendDisplay": "bottom",
+    "lineWidth": 2,
+    "nullValueDisplay": "connect",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "queue depth",
+    "seriesColors": [
+     "#7B56DB",
+     "#009CEB",
+     "#00CDAF"
+    ],
+    "yAxisMin": 0
+   }
+  },
+  "viz_failures_table": {
+   "type": "splunk.table",
+   "title": "Recent Workload Failures",
+   "dataSources": {
+    "primary": "ds_failures_table"
+   },
+   "options": {
+    "count": 25,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "reason": {
+      "rowColors": "> table | seriesByName('reason') | matchValue(reasonCfg)"
+     },
+     "kind": {
+      "rowColors": "> table | seriesByName('kind') | matchValue(kindCfg)"
+     }
+    }
+   },
+   "context": {
+    "reasonCfg": [
+     {
+      "match": "NodeNotReady",
+      "value": "#E0453A"
+     },
+     {
+      "match": "OOMKilled",
+      "value": "#E0453A"
+     },
+     {
+      "match": "CrashLoopBackOff",
+      "value": "#E0453A"
+     },
+     {
+      "match": "CUDA_OOM",
+      "value": "#F1813F"
+     },
+     {
+      "match": "CHECKPOINT_IO_STALL",
+      "value": "#F1813F"
+     },
+     {
+      "match": "HARNESS_EXIT_1",
+      "value": "#F8BE34"
+     },
+     {
+      "match": "PREEMPTED",
+      "value": "#FFFFFF"
+     }
+    ],
+    "kindCfg": [
+     {
+      "match": "inference",
+      "value": "#009CEB"
+     },
+     {
+      "match": "data service",
+      "value": "#00CDAF"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToSearch",
+     "options": {
+      "search": "`ai_platform_idx` (\"$row.workload.value$\" OR node=\"$row.node.value$\") | table _time sourcetype pod job_id workload node reason state message impact | sort 0 _time",
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$",
+      "openInNewTab": true
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 850,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_ns",
+   "input_workload"
+  ],
+  "structure": [
+   {
+    "item": "viz_kpi_replicas",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_restarts",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_pending",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_queue",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_failed",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_restarts_by_reason",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_queue_depth",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_failures_table",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 450,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>

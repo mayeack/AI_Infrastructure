@@ -1,0 +1,440 @@
+<dashboard version="2" theme="dark">
+<label>AI Cost and Unit Economics</label>
+<description>GPU-hours, idle capacity, model API spend and cost per million tokens, by business unit, application and model</description>
+<definition><![CDATA[
+{
+ "title": "AI Cost and Unit Economics",
+ "description": "GPU-hours, idle capacity, model API spend and cost per million tokens, by business unit, application and model",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-7d@d,now"
+   }
+  },
+  "input_bu": {
+   "type": "input.multiselect",
+   "title": "Business unit",
+   "options": {
+    "token": "bu",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.business_unit",
+    "label": "primary.business_unit"
+   },
+   "dataSources": {
+    "primary": "ds_bus"
+   }
+  },
+  "input_model": {
+   "type": "input.text",
+   "title": "Model filter",
+   "options": {
+    "token": "model",
+    "defaultValue": "*"
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_bus": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_cost_daily` | stats count BY business_unit | fields business_unit",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Business units"
+  },
+  "ds_kpi_alloc": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_gpu_hours_allocated_7d($bu$)`"
+   },
+   "name": "GPU-Hours Allocated (7d)"
+  },
+  "ds_kpi_idle": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_idle_gpu_hours_7d(*)`"
+   },
+   "name": "Idle GPU-Hours (7d)"
+  },
+  "ds_kpi_cost_per_1m": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_cost_per_1m_tokens_selfhosted`"
+   },
+   "name": "Cost per 1M Tokens (self-hosted)"
+  },
+  "ds_kpi_api_spend": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_model_api_spend_7d`"
+   },
+   "name": "Model API Spend (7d)"
+  },
+  "ds_kpi_tokens_per_gpu_s": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_tokens_per_gpu_second`"
+   },
+   "name": "Tokens per GPU-Second"
+  },
+  "ds_gpu_hours_by_bu": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_cost_daily` business_unit IN ($bu$) workload!=\"unallocated\" | timechart span=1d sum(gpu_hours) BY business_unit useother=f | foreach * [eval <<FIELD>>=round('<<FIELD>>'/1000,2)]"
+   },
+   "name": "GPU-Hours by Business Unit (thousands)"
+  },
+  "ds_cost_by_model": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_cost_tokens` model=\"$model$\" | stats sum(cost_usd) AS c sum(tokens_millions) AS t BY model | eval usd=round(c/t,2) | sort - usd | table model usd"
+   },
+   "name": "Cost per 1M Tokens by Model (USD)"
+  },
+  "ds_workloads_table": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_cost_daily` business_unit IN ($bu$) workload!=\"unallocated\" | lookup gpu_rate_card ai_pod OUTPUT usd_per_gpu_hour AS rate_card_usd | eval rate=coalesce(rate_card_usd,usd_per_gpu_hour,2.40) | stats sum(gpu_hours) AS gpu_hours avg(avg_gpu_util) AS avg_gpu_util latest(rate) AS rate latest(business_unit) AS business_unit latest(kind) AS kind latest(cost_center) AS cost_center BY workload | eval est_cost_usd=round(gpu_hours*rate,0), avg_gpu_util=round(avg_gpu_util,0), gpu_hours=round(gpu_hours,0) | sort - est_cost_usd | head 7 | table workload business_unit kind gpu_hours est_cost_usd avg_gpu_util cost_center"
+   },
+   "name": "Top Workloads by Cost (7d)"
+  }
+ },
+ "visualizations": {
+  "viz_kpi_alloc": {
+   "type": "splunk.singlevalue",
+   "title": "GPU-Hours Allocated (7d)",
+   "dataSources": {
+    "primary": "ds_kpi_alloc"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF",
+    "shouldAbbreviateMajorValue": true
+   }
+  },
+  "viz_kpi_idle": {
+   "type": "splunk.singlevalue",
+   "title": "Idle GPU-Hours (7d)",
+   "dataSources": {
+    "primary": "ds_kpi_idle"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#E0453A",
+    "shouldAbbreviateMajorValue": true
+   }
+  },
+  "viz_kpi_cost_per_1m": {
+   "type": "splunk.singlevalue",
+   "title": "Cost per 1M Tokens (self-hosted)",
+   "dataSources": {
+    "primary": "ds_kpi_cost_per_1m"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 2,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF",
+    "unit": "$",
+    "unitPosition": "before"
+   }
+  },
+  "viz_kpi_api_spend": {
+   "type": "splunk.singlevalue",
+   "title": "Model API Spend (7d)",
+   "dataSources": {
+    "primary": "ds_kpi_api_spend"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "$",
+    "unitPosition": "before",
+    "shouldAbbreviateMajorValue": true
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 150000,
+      "value": "#FFFFFF"
+     },
+     {
+      "from": 150000,
+      "value": "#F1813F"
+     }
+    ]
+   }
+  },
+  "viz_kpi_tokens_per_gpu_s": {
+   "type": "splunk.singlevalue",
+   "title": "Tokens per GPU-Second",
+   "dataSources": {
+    "primary": "ds_kpi_tokens_per_gpu_s"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF"
+   }
+  },
+  "viz_gpu_hours_by_bu": {
+   "type": "splunk.column",
+   "title": "GPU-Hours by Business Unit (thousands)",
+   "dataSources": {
+    "primary": "ds_gpu_hours_by_bu"
+   },
+   "options": {
+    "stackMode": "stacked",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "thousands of GPU-hours",
+    "seriesColors": [
+     "#7B56DB",
+     "#009CEB",
+     "#00CDAF",
+     "#DD9900",
+     "#FF677B",
+     "#CB2196"
+    ]
+   }
+  },
+  "viz_cost_by_model": {
+   "type": "splunk.bar",
+   "title": "Cost per 1M Tokens by Model (USD)",
+   "dataSources": {
+    "primary": "ds_cost_by_model"
+   },
+   "options": {
+    "stackMode": "auto",
+    "dataValuesDisplay": "all",
+    "seriesColors": [
+     "#009CEB"
+    ],
+    "legendDisplay": "off",
+    "xAxisTitleText": "USD per 1M tokens",
+    "yAxisTitleText": ""
+   }
+  },
+  "viz_workloads_table": {
+   "type": "splunk.table",
+   "title": "Top Workloads by Cost (7d)",
+   "dataSources": {
+    "primary": "ds_workloads_table"
+   },
+   "options": {
+    "count": 7,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "gpu_hours": {
+      "data": "> table | seriesByName('gpu_hours') | formatByType(numCfg)",
+      "align": "right",
+      "width": 110
+     },
+     "est_cost_usd": {
+      "data": "> table | seriesByName('est_cost_usd') | formatByType(usdCfg)",
+      "align": "right",
+      "width": 130
+     },
+     "avg_gpu_util": {
+      "rowColors": "> table | seriesByName('avg_gpu_util') | rangeValue(utilCfg)",
+      "data": "> table | seriesByName('avg_gpu_util') | formatByType(pctCfg)",
+      "align": "right",
+      "width": 120
+     }
+    }
+   },
+   "context": {
+    "numCfg": {
+     "number": {
+      "thousandSeparated": true,
+      "precision": 0
+     }
+    },
+    "usdCfg": {
+     "number": {
+      "thousandSeparated": true,
+      "precision": 0,
+      "prefix": "$"
+     }
+    },
+    "pctCfg": {
+     "number": {
+      "precision": 0,
+      "unit": "%",
+      "unitPosition": "after"
+     }
+    },
+    "utilCfg": [
+     {
+      "to": 50,
+      "value": "#E0453A"
+     },
+     {
+      "from": 50,
+      "to": 65,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 65,
+      "value": "#53A051"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToSearch",
+     "options": {
+      "search": "`ai_cost_daily` workload=\"$row.workload.value$\" | table _time workload business_unit kind ai_pod gpu_hours idle_gpu_hours avg_gpu_util usd_per_gpu_hour est_cost_usd | sort 0 _time",
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$",
+      "openInNewTab": true
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 850,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_bu",
+   "input_model"
+  ],
+  "structure": [
+   {
+    "item": "viz_kpi_alloc",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_idle",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_cost_per_1m",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_api_spend",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_tokens_per_gpu_s",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_gpu_hours_by_bu",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_cost_by_model",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_workloads_table",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 450,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>

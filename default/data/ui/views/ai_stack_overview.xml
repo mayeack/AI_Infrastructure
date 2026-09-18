@@ -1,0 +1,846 @@
+<dashboard version="2" theme="dark">
+<label>The AI Stack</label>
+<description>Six layers of enterprise AI, bottom-up: Cisco compute and storage, Cisco Nexus network, platform, applications, models and agents, with event counts, links and the five scoreboards</description>
+<definition><![CDATA[
+{
+ "title": "The AI Stack",
+ "description": "Six layers of enterprise AI, bottom-up: Cisco compute and storage, Cisco Nexus network, platform, applications, models and agents, with event counts, links and the five scoreboards",
+ "inputs": {},
+ "defaults": {
+  "dataSources": {
+   "global": {
+    "options": {
+     "queryParameters": {
+      "earliest": "-30d@d",
+      "latest": "now"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_layers": {
+   "type": "ds.search",
+   "options": {
+    "query": "| tstats count WHERE index IN (ai_infra,ai_network,ai_platform,ai_application,ai_model_eval) host=ai-demo-generator BY sourcetype | lookup ai_layer_map sourcetype OUTPUT layer layer_no dashboard | where isnotnull(layer_no) | stats sum(count) AS events BY layer_no | sort 0 layer_no",
+    "queryParameters": {
+     "earliest": "-30d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Events by layer (24h)"
+  },
+  "ds_layer_06": {
+   "type": "ds.chain",
+   "name": "Layer 06",
+   "options": {
+    "extend": "ds_layers",
+    "query": "| search layer_no=06 | fields events"
+   }
+  },
+  "ds_layer_05": {
+   "type": "ds.chain",
+   "name": "Layer 05",
+   "options": {
+    "extend": "ds_layers",
+    "query": "| search layer_no=05 | fields events"
+   }
+  },
+  "ds_layer_04": {
+   "type": "ds.chain",
+   "name": "Layer 04",
+   "options": {
+    "extend": "ds_layers",
+    "query": "| search layer_no=04 | fields events"
+   }
+  },
+  "ds_layer_03": {
+   "type": "ds.chain",
+   "name": "Layer 03",
+   "options": {
+    "extend": "ds_layers",
+    "query": "| search layer_no=03 | fields events"
+   }
+  },
+  "ds_layer_02": {
+   "type": "ds.chain",
+   "name": "Layer 02",
+   "options": {
+    "extend": "ds_layers",
+    "query": "| search layer_no=02 | fields events"
+   }
+  },
+  "ds_layer_01": {
+   "type": "ds.chain",
+   "name": "Layer 01",
+   "options": {
+    "extend": "ds_layers",
+    "query": "| search layer_no=01 | fields events"
+   }
+  },
+  "ds_sb_reliability": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard` scoreboard=\"reliability\" metric=\"Availability\" | stats latest(value) AS value",
+    "queryParameters": {
+     "earliest": "-30d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Reliability: Availability"
+  },
+  "ds_sb_velocity": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard` scoreboard=\"velocity\" metric=\"Pilot to production\" | stats latest(value) AS value",
+    "queryParameters": {
+     "earliest": "-30d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Velocity: Pilot to production"
+  },
+  "ds_sb_efficiency": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard` scoreboard=\"efficiency\" metric=\"GPU utilization\" | stats latest(value) AS value",
+    "queryParameters": {
+     "earliest": "-30d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Efficiency: GPU utilization"
+  },
+  "ds_sb_trust": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard` scoreboard=\"trust\" metric=\"Safety compliance\" | stats latest(value) AS value",
+    "queryParameters": {
+     "earliest": "-30d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Trust: Safety compliance"
+  },
+  "ds_sb_security": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard` scoreboard=\"security\" metric=\"Open findings\" | stats latest(value) AS value",
+    "queryParameters": {
+     "earliest": "-30d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Security: Open findings"
+  }
+ },
+ "visualizations": {
+  "viz_header": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "# The AI Stack\n\nSix layers, one platform. Every layer feeds the same Splunk indexes, so an incident can be followed from a Cisco Nexus QoS change at the base to a hallucinating model and a runaway agent at the top. Click a layer to open its dashboard.",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_rect_06": {
+   "type": "splunk.rectangle",
+   "options": {
+    "fillColor": "#31373E",
+    "fillOpacity": 1,
+    "rx": 8,
+    "strokeColor": "#31373E",
+    "strokeWidth": 1
+   }
+  },
+  "viz_md_06": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "## 06 Agents\nAgent runs, steps, tool calls and outcomes  \n[Open AI Agents](/app/ai_infra_monitoring/ai_agents)",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_count_06": {
+   "type": "splunk.singlevalueicon",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_layer_06"
+   },
+   "options": {
+    "icon": "user",
+    "iconPosition": "before",
+    "iconColor": "#00CDAF",
+    "iconOpacity": 1,
+    "showValue": true,
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "shouldAbbreviateMajorValue": true,
+    "underLabel": "events, last 24h",
+    "backgroundColor": "transparent"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_agents",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_rect_05": {
+   "type": "splunk.rectangle",
+   "options": {
+    "fillColor": "#31373E",
+    "fillOpacity": 1,
+    "rx": 8,
+    "strokeColor": "#31373E",
+    "strokeWidth": 1
+   }
+  },
+  "viz_md_05": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "## 05 Models\nQuality scores and evaluation evidence by model and version  \n[Open Model Performance and Quality](/app/ai_infra_monitoring/model_performance_quality)",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_count_05": {
+   "type": "splunk.singlevalueicon",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_layer_05"
+   },
+   "options": {
+    "icon": "star",
+    "iconPosition": "before",
+    "iconColor": "#00CDAF",
+    "iconOpacity": 1,
+    "showValue": true,
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "shouldAbbreviateMajorValue": true,
+    "underLabel": "events, last 24h",
+    "backgroundColor": "transparent"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "model_performance_quality",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_rect_04": {
+   "type": "splunk.rectangle",
+   "options": {
+    "fillColor": "#31373E",
+    "fillOpacity": 1,
+    "rx": 8,
+    "strokeColor": "#31373E",
+    "strokeWidth": 1
+   }
+  },
+  "viz_md_04": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "## 04 Applications\nRequests, latency, tokens, cost and guardrails, correlated by trace ID  \n[Open AI Applications](/app/ai_infra_monitoring/ai_applications)",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_count_04": {
+   "type": "splunk.singlevalueicon",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_layer_04"
+   },
+   "options": {
+    "icon": "apps",
+    "iconPosition": "before",
+    "iconColor": "#00CDAF",
+    "iconOpacity": 1,
+    "showValue": true,
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "shouldAbbreviateMajorValue": true,
+    "underLabel": "events, last 24h",
+    "backgroundColor": "transparent"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_applications",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_rect_03": {
+   "type": "splunk.rectangle",
+   "options": {
+    "fillColor": "#31373E",
+    "fillOpacity": 1,
+    "rx": 8,
+    "strokeColor": "#31373E",
+    "strokeWidth": 1
+   }
+  },
+  "viz_md_03": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "## 03 Platform\nKubernetes, inference serving and evaluation and fine-tuning jobs  \n[Open AI Platform and Workloads](/app/ai_infra_monitoring/ai_platform_workloads)",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_count_03": {
+   "type": "splunk.singlevalueicon",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_layer_03"
+   },
+   "options": {
+    "icon": "cube",
+    "iconPosition": "before",
+    "iconColor": "#00CDAF",
+    "iconOpacity": 1,
+    "showValue": true,
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "shouldAbbreviateMajorValue": true,
+    "underLabel": "events, last 24h",
+    "backgroundColor": "transparent"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_platform_workloads",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_rect_02": {
+   "type": "splunk.rectangle",
+   "options": {
+    "fillColor": "#31373E",
+    "fillOpacity": 1,
+    "rx": 8,
+    "strokeColor": "#00CDAF",
+    "strokeWidth": 2
+   }
+  },
+  "viz_md_02": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "## 02 Network\nCisco Nexus switches  \n[Open AI Network Fabric](/app/ai_infra_monitoring/ai_network_fabric)  \n**Cisco hardware, tightly integrated with Splunk**",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_count_02": {
+   "type": "splunk.singlevalueicon",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_layer_02"
+   },
+   "options": {
+    "icon": "network",
+    "iconPosition": "before",
+    "iconColor": "#00CDAF",
+    "iconOpacity": 1,
+    "showValue": true,
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "shouldAbbreviateMajorValue": true,
+    "underLabel": "events, last 24h",
+    "backgroundColor": "transparent"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_network_fabric",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_rect_01": {
+   "type": "splunk.rectangle",
+   "options": {
+    "fillColor": "#31373E",
+    "fillOpacity": 1,
+    "rx": 8,
+    "strokeColor": "#00CDAF",
+    "strokeWidth": 2
+   }
+  },
+  "viz_md_01": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "## 01 Compute and storage\nCisco UCS servers, Cisco AI PODs  \n[Open AI Infrastructure Health](/app/ai_infra_monitoring/ai_infrastructure_health)  \n**Cisco hardware, tightly integrated with Splunk**",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_count_01": {
+   "type": "splunk.singlevalueicon",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_layer_01"
+   },
+   "options": {
+    "icon": "server",
+    "iconPosition": "before",
+    "iconColor": "#00CDAF",
+    "iconOpacity": 1,
+    "showValue": true,
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "shouldAbbreviateMajorValue": true,
+    "underLabel": "events, last 24h",
+    "backgroundColor": "transparent"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_infrastructure_health",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_sb_title": {
+   "type": "splunk.markdown",
+   "options": {
+    "markdown": "### Scoreboards  \n[Open AI Operations Executive Overview](/app/ai_infra_monitoring/ai_operations_executive_overview) | [AI Cost and Unit Economics](/app/ai_infra_monitoring/ai_cost_unit_economics) | [AI Security Posture](/app/ai_infra_monitoring/ai_security_posture)",
+    "fontColor": "#FFFFFF",
+    "backgroundColor": "transparent",
+    "fontSize": "default"
+   }
+  },
+  "viz_sb_reliability": {
+   "type": "splunk.singlevalue",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_sb_reliability"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "numberPrecision": 2,
+    "underLabel": "Reliability: Availability",
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_operations_executive_overview",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_sb_velocity": {
+   "type": "splunk.singlevalue",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_sb_velocity"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "numberPrecision": 0,
+    "underLabel": "Velocity: Pilot to production",
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "unit": "d",
+    "unitPosition": "after"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_operations_executive_overview",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_sb_efficiency": {
+   "type": "splunk.singlevalue",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_sb_efficiency"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "numberPrecision": 1,
+    "underLabel": "Efficiency: GPU utilization",
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_operations_executive_overview",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_sb_trust": {
+   "type": "splunk.singlevalue",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_sb_trust"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "numberPrecision": 1,
+    "underLabel": "Trust: Safety compliance",
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_operations_executive_overview",
+      "newTab": false
+     }
+    }
+   ]
+  },
+  "viz_sb_security": {
+   "type": "splunk.singlevalue",
+   "title": "",
+   "dataSources": {
+    "primary": "ds_sb_security"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorColor": "#FFFFFF",
+    "majorFontSize": 36,
+    "numberPrecision": 0,
+    "underLabel": "Security: Open findings",
+    "sparklineDisplay": "off",
+    "trendDisplay": "off"
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToDashboard",
+     "options": {
+      "app": "ai_infra_monitoring",
+      "dashboard": "ai_operations_executive_overview",
+      "newTab": false
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "absolute",
+  "options": {
+   "width": 1440,
+   "height": 1080,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [],
+  "structure": [
+   {
+    "item": "viz_header",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 1440,
+     "h": 100
+    }
+   },
+   {
+    "item": "viz_rect_06",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 110,
+     "w": 1440,
+     "h": 120
+    }
+   },
+   {
+    "item": "viz_md_06",
+    "type": "block",
+    "position": {
+     "x": 24,
+     "y": 118,
+     "w": 1000,
+     "h": 104
+    }
+   },
+   {
+    "item": "viz_count_06",
+    "type": "block",
+    "position": {
+     "x": 1100,
+     "y": 120,
+     "w": 320,
+     "h": 100
+    }
+   },
+   {
+    "item": "viz_rect_05",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 240,
+     "w": 1440,
+     "h": 120
+    }
+   },
+   {
+    "item": "viz_md_05",
+    "type": "block",
+    "position": {
+     "x": 24,
+     "y": 248,
+     "w": 1000,
+     "h": 104
+    }
+   },
+   {
+    "item": "viz_count_05",
+    "type": "block",
+    "position": {
+     "x": 1100,
+     "y": 250,
+     "w": 320,
+     "h": 100
+    }
+   },
+   {
+    "item": "viz_rect_04",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 370,
+     "w": 1440,
+     "h": 120
+    }
+   },
+   {
+    "item": "viz_md_04",
+    "type": "block",
+    "position": {
+     "x": 24,
+     "y": 378,
+     "w": 1000,
+     "h": 104
+    }
+   },
+   {
+    "item": "viz_count_04",
+    "type": "block",
+    "position": {
+     "x": 1100,
+     "y": 380,
+     "w": 320,
+     "h": 100
+    }
+   },
+   {
+    "item": "viz_rect_03",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 500,
+     "w": 1440,
+     "h": 120
+    }
+   },
+   {
+    "item": "viz_md_03",
+    "type": "block",
+    "position": {
+     "x": 24,
+     "y": 508,
+     "w": 1000,
+     "h": 104
+    }
+   },
+   {
+    "item": "viz_count_03",
+    "type": "block",
+    "position": {
+     "x": 1100,
+     "y": 510,
+     "w": 320,
+     "h": 100
+    }
+   },
+   {
+    "item": "viz_rect_02",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 630,
+     "w": 1440,
+     "h": 120
+    }
+   },
+   {
+    "item": "viz_md_02",
+    "type": "block",
+    "position": {
+     "x": 24,
+     "y": 638,
+     "w": 1000,
+     "h": 104
+    }
+   },
+   {
+    "item": "viz_count_02",
+    "type": "block",
+    "position": {
+     "x": 1100,
+     "y": 640,
+     "w": 320,
+     "h": 100
+    }
+   },
+   {
+    "item": "viz_rect_01",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 760,
+     "w": 1440,
+     "h": 120
+    }
+   },
+   {
+    "item": "viz_md_01",
+    "type": "block",
+    "position": {
+     "x": 24,
+     "y": 768,
+     "w": 1000,
+     "h": 104
+    }
+   },
+   {
+    "item": "viz_count_01",
+    "type": "block",
+    "position": {
+     "x": 1100,
+     "y": 770,
+     "w": 320,
+     "h": 100
+    }
+   },
+   {
+    "item": "viz_sb_title",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 900,
+     "w": 1440,
+     "h": 60
+    }
+   },
+   {
+    "item": "viz_sb_reliability",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 960,
+     "w": 288,
+     "h": 110
+    }
+   },
+   {
+    "item": "viz_sb_velocity",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 960,
+     "w": 288,
+     "h": 110
+    }
+   },
+   {
+    "item": "viz_sb_efficiency",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 960,
+     "w": 288,
+     "h": 110
+    }
+   },
+   {
+    "item": "viz_sb_trust",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 960,
+     "w": 288,
+     "h": 110
+    }
+   },
+   {
+    "item": "viz_sb_security",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 960,
+     "w": 288,
+     "h": 110
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>

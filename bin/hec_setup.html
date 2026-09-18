@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>HTTP Event Collector setup for Splunk Cloud Platform</title><style>
+:root{color-scheme:dark}
+body{margin:0;padding:32px 16px;background:#171D21;color:#E1E6EB;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:1080px;margin:0 auto}
+h1,h2,h3,h4{color:#FFFFFF;line-height:1.25;margin:1.6em 0 .5em}
+h1{font-size:2em;border-bottom:1px solid #3C444D;padding-bottom:.3em}
+h2{font-size:1.5em;border-bottom:1px solid #31373D;padding-bottom:.25em}
+h3{font-size:1.2em}
+a{color:#009CEB;text-decoration:none}a:hover{text-decoration:underline}
+code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.9em;background:#2B3033;padding:.1em .35em;border-radius:3px}
+pre{background:#0F1316;border:1px solid #3C444D;border-radius:6px;padding:12px 14px;overflow-x:auto}
+pre code{background:none;padding:0;font-size:.85em}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92em}
+th,td{border:1px solid #3C444D;padding:6px 9px;text-align:left;vertical-align:top}
+th{background:#212527;color:#FFFFFF}
+tr:nth-child(even) td{background:#1C2125}
+blockquote{border-left:4px solid #7B56DB;margin:1em 0;padding:.2em 1em;color:#B8C0C8}
+hr{border:0;border-top:1px solid #3C444D;margin:2em 0}
+ul,ol{padding-left:1.6em}
+li{margin:.2em 0}
+</style></head><body><main>
+<h1>HTTP Event Collector setup for Splunk Cloud Platform</h1>
+<p>On Splunk Cloud Platform the generator runs outside the stack and sends events to an HTTP Event Collector (HEC) token. Scripted inputs stay disabled in the app. On Splunk Enterprise <code>make hec-setup</code> does all of this through the management port; the steps below are the manual equivalent.</p>
+<h2>1. Install the app</h2>
+<p>Upload <code>dist/ai_infra_monitoring-1.0.0.tgz</code> (Apps &gt; Manage Apps &gt; Install app from file). The app passes <code>splunk-appinspect --mode precert --included-tags cloud</code>; on Splunk Cloud the indexes below are not created by the app and must be added by hand.</p>
+<h2>2. Create the nine indexes</h2>
+<p>Settings &gt; Indexes &gt; New Index. Names are lowercase and must match exactly.</p>
+<table><thead><tr><th>Index</th><th>Type</th><th>Holds</th></tr></thead><tbody>
+<tr><td><code>ai_infra_metrics</code></td><td><strong>Metrics</strong></td><td><code>ai:gpu:metrics</code> (DCGM GPU and storage measures)</td></tr>
+<tr><td><code>ai_infra</code></td><td>Events</td><td>GPU faults, Cisco UCS alarms, inventory and audit</td></tr>
+<tr><td><code>ai_network</code></td><td>Events</td><td>Cisco Nexus interface, anomaly and config events, path tests</td></tr>
+<tr><td><code>ai_platform</code></td><td>Events</td><td>Kubernetes events, inference servers, job lifecycle</td></tr>
+<tr><td><code>ai_application</code></td><td>Events</td><td>application requests, agent runs and steps, guardrails</td></tr>
+<tr><td><code>ai_model_eval</code></td><td>Events</td><td>evaluation runs</td></tr>
+<tr><td><code>ai_cost</code></td><td>Events</td><td>daily GPU-hour and token cost rows</td></tr>
+<tr><td><code>ai_security</code></td><td>Events</td><td>raw access, identity and egress events plus findings</td></tr>
+<tr><td><code>ai_summary</code></td><td>Events</td><td>scoreboard rollups, incident history, alert events</td></tr>
+</tbody></table>
+<p>A 30-day backfill is about 2.1 GB raw across all indexes; a retention of 90 days (<code>frozenTimePeriodInSecs = 7776000</code>) is what the app declares on Splunk Enterprise.</p>
+<h2>3. Create the token</h2>
+<p>Settings &gt; Data Inputs &gt; HTTP Event Collector &gt; New Token.</p>
+<ol>
+<li>Name: <code>ai_infra_demo</code>. Leave source type blank (the generator sets it per event).</li>
+<li>Allowed indexes: select all nine indexes above. Default index: <code>ai_infra</code>.</li>
+<li>Do not enable indexer acknowledgement (the generator does not use channels).</li>
+<li>Copy the token value. The endpoint is <code>https://&lt;stack&gt;.splunkcloud.com:8088</code> (or <code>https://http-inputs-&lt;stack&gt;.splunkcloud.com:443</code> on some stacks; check Settings &gt; Data Inputs &gt; HTTP Event Collector &gt; Global Settings).</li>
+</ol>
+<h2>4. Probe the token</h2>
+<pre><code class="lang-bash">curl -k https://&lt;stack&gt;.splunkcloud.com:8088/services/collector/event \
+  -H &quot;Authorization: Splunk &lt;token&gt;&quot; \
+  -d &#x27;{&quot;event&quot;:&quot;hec_probe&quot;,&quot;index&quot;:&quot;ai_summary&quot;,&quot;sourcetype&quot;:&quot;ai:hec_probe&quot;,&quot;host&quot;:&quot;ai-demo-generator&quot;}&#x27;</code></pre>
+<p>Expected reply: <code>{&quot;text&quot;:&quot;Success&quot;,&quot;code&quot;:0}</code>. Then repeat with <code>--compressed -H &quot;Content-Encoding: gzip&quot;</code> and a gzip'd body if you want to confirm compression (the generator falls back to identity encoding when gzip is refused).</p>
+<h2>5. Backfill and stream from any host</h2>
+<pre><code class="lang-bash">export AI_DEMO_HEC_TOKEN=&lt;token&gt;
+export HEC_URL=https://&lt;stack&gt;.splunkcloud.com:8088
+bin/ai_demo_generator.py --backfill 30d --hec &quot;$HEC_URL&quot; --token &quot;$AI_DEMO_HEC_TOKEN&quot; --seed 20260916
+bin/ai_demo_generator.py --stream --hec &quot;$HEC_URL&quot; --token &quot;$AI_DEMO_HEC_TOKEN&quot; --seed 20260916</code></pre>
+<p>The backfill takes 10-20 minutes over a fast link and prints the expected event counts per sourcetype. Run the stream command under <code>nohup</code> or a service manager to keep the last-minute feeds current; run <code>--fire-incident</code> from the same host for a live demo.</p>
+<h2>6. Troubleshooting</h2>
+<table><thead><tr><th>Reply</th><th>Cause</th><th>Fix</th></tr></thead><tbody>
+<tr><td><code>{&quot;text&quot;:&quot;Incorrect index&quot;,&quot;code&quot;:7}</code></td><td>index not in the token's allowed list or not created</td><td>add the index in step 2 and to the token in step 3</td></tr>
+<tr><td><code>{&quot;text&quot;:&quot;Invalid token&quot;,&quot;code&quot;:4}</code></td><td>wrong token or HEC disabled</td><td>check Global Settings &gt; All Tokens = Enabled</td></tr>
+<tr><td>HTTP 400 <code>Invalid data format</code></td><td>metrics event sent to <code>/services/collector/event</code> with a non-metric index</td><td><code>ai_infra_metrics</code> must be a metrics index</td></tr>
+<tr><td>HTTP 403</td><td>token disabled</td><td>enable the token</td></tr>
+<tr><td><code>Server is busy</code> (code 9)</td><td>queue pressure during backfill</td><td>rerun with <code>--workers 2 --batch-bytes 1500000</code></td></tr>
+</tbody></table>
+<p>Everything the generator sends carries <code>host=ai-demo-generator</code>, so <code>index IN (...) host=ai-demo-generator | delete</code> (with the <code>can_delete</code> capability) removes the demo data cleanly.</p>
+</main></body></html>

@@ -1,0 +1,8 @@
+rank,scoreboard,signal,impact,owner,status,dashboard_id
+1,reliability,dc1-ucs-gpu-07 repeat ECC faults behind a flapping fabric link,"2 replicas lost, 47 min degraded",infra-oncall,node drained,ai_infrastructure_health
+2,velocity,evaluation queue wait p50 up 58% week over week,v41 release evidence delayed 1.5 d,ml-platform,capacity rebalanced,ai_platform_workloads
+3,efficiency,eval-suite-v41 running at 38% GPU utilization,$4.6K/week idle spend,data-science,right-sizing,ai_cost_unit_economics
+4,trust,med-advisor-v41 reasoning score drift -2.1 pts,release decision pending review,model-quality,under review,model_performance_quality
+5,security,first-seen model weights read by svc-mlops-ci,model asset exposure risk,soc-tier2,investigating,ai_security_posture
+6,security,prompt-injection campaign from 203.0.113.10,"blocked by guardrails, 59 attempts",soc-tier1,contained,ai_security_posture
+7,efficiency,"claims-intake-agent looping on claims_api failures, 37 runs stopped",token spend contained at $118,ai-apps,tool fix deployed,ai_agents

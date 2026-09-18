@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Changelog</title><style>
+:root{color-scheme:dark}
+body{margin:0;padding:32px 16px;background:#171D21;color:#E1E6EB;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:1080px;margin:0 auto}
+h1,h2,h3,h4{color:#FFFFFF;line-height:1.25;margin:1.6em 0 .5em}
+h1{font-size:2em;border-bottom:1px solid #3C444D;padding-bottom:.3em}
+h2{font-size:1.5em;border-bottom:1px solid #31373D;padding-bottom:.25em}
+h3{font-size:1.2em}
+a{color:#009CEB;text-decoration:none}a:hover{text-decoration:underline}
+code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.9em;background:#2B3033;padding:.1em .35em;border-radius:3px}
+pre{background:#0F1316;border:1px solid #3C444D;border-radius:6px;padding:12px 14px;overflow-x:auto}
+pre code{background:none;padding:0;font-size:.85em}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92em}
+th,td{border:1px solid #3C444D;padding:6px 9px;text-align:left;vertical-align:top}
+th{background:#212527;color:#FFFFFF}
+tr:nth-child(even) td{background:#1C2125}
+blockquote{border-left:4px solid #7B56DB;margin:1em 0;padding:.2em 1em;color:#B8C0C8}
+hr{border:0;border-top:1px solid #3C444D;margin:2em 0}
+ul,ol{padding-left:1.6em}
+li{margin:.2em 0}
+</style></head><body><main>
+<h1>Changelog</h1>
+<p>All notable changes to <code>ai_infra_monitoring</code> are documented here. The format follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> and the project uses <a href="https://semver.org/">Semantic Versioning</a>.</p>
+<h2>[1.0.0] - 2026-09-18</h2>
+<h3>Added</h3>
+<ul>
+<li>Nine indexes (<code>ai_infra_metrics</code> as a metrics index; <code>ai_infra</code>, <code>ai_network</code>, <code>ai_platform</code>, <code>ai_application</code>, <code>ai_model_eval</code>, <code>ai_cost</code>, <code>ai_security</code>, <code>ai_summary</code>).</li>
+<li>25 sourcetypes with search-time JSON extraction, per-layer <code>EVAL-layer</code> calculated fields, field aliases, the <code>metric-schema:ai_gpu_metrics</code> log-to-metrics transform, six <code>ai_layer_*</code> event types with matching tags.</li>
+<li>Five CSV lookups: <code>gpu_rate_card</code>, <code>ai_node_inventory</code> (68 nodes), <code>ai_application_catalog</code>, <code>ai_layer_map</code>, <code>ai_top_risks</code>.</li>
+<li>Ten Dashboard Studio views in dark theme: the <code>ai_stack_overview</code> landing page, the six layer dashboards, cost, security posture and the executive overview.</li>
+<li>25 scheduled alerts (compute, network, platform, applications, models, agents, cost and security) writing <code>ai:alert</code> events to <code>ai_summary</code>, plus four Enterprise Security correlation-search twins shipped disabled.</li>
+<li>Five scoreboard rollups (<code>Reliability</code>, <code>Velocity</code>, <code>Efficiency</code>, <code>Trust</code>, <code>Security</code>) writing <code>ai:scoreboard</code> every 15 minutes.</li>
+<li><code>bin/ai_demo_generator.py</code>, a deterministic stdlib-only generator with backfill, stream, <code>--fire-incident</code> and HEC modes, and <code>bin/backfill.sh</code>.</li>
+<li>Build and verification tooling outside the package: <code>Makefile</code>, <code>tools/hec_setup.py</code>, <code>tools/smoke.py</code>, <code>tools/validate_views.py</code>, <code>tools/make_icons.py</code>, <code>tools/md2html.py</code>, <code>tools/screenshots.py</code>, <code>tools/enable_es.py</code>.</li>
+<li>Documentation: <code>README.md</code>, <code>docs/field_reference.md</code>, <code>bin/hec_setup.md</code>, Apache-2.0 <code>LICENSE</code>, HTML twins of every Markdown file.</li>
+</ul>
+</main></body></html>

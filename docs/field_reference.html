@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Field reference</title><style>
+:root{color-scheme:dark}
+body{margin:0;padding:32px 16px;background:#171D21;color:#E1E6EB;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:1080px;margin:0 auto}
+h1,h2,h3,h4{color:#FFFFFF;line-height:1.25;margin:1.6em 0 .5em}
+h1{font-size:2em;border-bottom:1px solid #3C444D;padding-bottom:.3em}
+h2{font-size:1.5em;border-bottom:1px solid #31373D;padding-bottom:.25em}
+h3{font-size:1.2em}
+a{color:#009CEB;text-decoration:none}a:hover{text-decoration:underline}
+code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.9em;background:#2B3033;padding:.1em .35em;border-radius:3px}
+pre{background:#0F1316;border:1px solid #3C444D;border-radius:6px;padding:12px 14px;overflow-x:auto}
+pre code{background:none;padding:0;font-size:.85em}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92em}
+th,td{border:1px solid #3C444D;padding:6px 9px;text-align:left;vertical-align:top}
+th{background:#212527;color:#FFFFFF}
+tr:nth-child(even) td{background:#1C2125}
+blockquote{border-left:4px solid #7B56DB;margin:1em 0;padding:.2em 1em;color:#B8C0C8}
+hr{border:0;border-top:1px solid #3C444D;margin:2em 0}
+ul,ol{padding-left:1.6em}
+li{margin:.2em 0}
+</style></head><body><main>
+<h1>Field reference</h1>
+<p>Every sourcetype the generator writes, with the fields it carries. Common to all events: <code>timestamp</code> (ISO-8601 with milliseconds and numeric offset, e.g. <code>2026-09-18T14:49:31.120-0700</code>, parsed by <code>TIME_PREFIX</code>/<code>TIME_FORMAT</code>; HEC uses the epoch <code>time</code> field instead), <code>host=ai-demo-generator</code>, <code>source=ai_demo_generator</code>. <code>layer</code> is never emitted; it is an <code>EVAL-layer</code> calculated field on every sourcetype (<code>compute</code>, <code>network</code>, <code>platform</code>, <code>application</code>, <code>model</code>, <code>agent</code>, <code>efficiency</code>, <code>security</code>, <code>summary</code>) and <code>ai_layer_map</code> adds <code>layer_no</code> and <code>dashboard</code> through an automatic lookup. Types: <code>str</code>, <code>int</code>, <code>float</code>, <code>bool</code>, <code>array</code>. "Used by" names the dashboard (D) and alert (A) that read the field; the KPI macros are listed in the README.</p>
+<h2>Index <code>ai_infra_metrics</code> (metrics)</h2>
+<h3><code>ai:gpu:metrics</code></h3>
+<p>One multi-metric datapoint per GPU per interval (1 min in the last 24 h, 5 min days 2-7, 15 min days 8-30). Sent over HEC in the <code>fields</code>/<code>metric_name:</code> form; the stdout path emits plain JSON that <code>metric-schema:ai_gpu_metrics</code> converts (<code>METRIC-SCHEMA-MEASURES = DCGM_FI_DEV_*, storage_*</code>).</p>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>ai_pod</code></td><td>dimension str</td><td><code>aipod-dc1</code>, <code>aipod-dc2</code>, <code>aipod-lab</code></td><td>D infrastructure (POD filter, utilization chart), A idle capacity</td></tr>
+<tr><td><code>node</code></td><td>dimension str</td><td><code>dc1-ucs-gpu-07</code></td><td>D infrastructure (node filter), GPUs Monitored</td></tr>
+<tr><td><code>gpu</code></td><td>dimension str</td><td><code>GPU0</code> … <code>GPU7</code></td><td>GPUs Monitored (<code>BY node gpu</code>)</td></tr>
+<tr><td><code>workload</code></td><td>dimension str</td><td><code>serve-med-advisor-v41</code>, <code>ft-claims-v13</code>, <code>unallocated</code></td><td>Avg GPU Utilization (<code>NOT workload=&quot;unallocated&quot;</code>), A idle capacity</td></tr>
+<tr><td><code>kind</code></td><td>dimension str</td><td><code>inference</code>, <code>evaluation</code>, <code>fine-tuning</code>, <code>unallocated</code></td><td>breakdowns</td></tr>
+<tr><td><code>DCGM_FI_DEV_GPU_UTIL</code></td><td>measure float %</td><td>61.2 (0-3 on unallocated GPUs)</td><td>D infrastructure tiles and chart, D executive utilization, A idle capacity</td></tr>
+<tr><td><code>DCGM_FI_DEV_MEM_COPY_UTIL</code></td><td>measure float %</td><td>38.4</td><td>drilldowns</td></tr>
+<tr><td><code>DCGM_FI_DEV_FB_USED</code></td><td>measure int MiB</td><td>61440</td><td>drilldowns</td></tr>
+<tr><td><code>DCGM_FI_DEV_POWER_USAGE</code></td><td>measure float W</td><td>412.5 (60-70 unallocated)</td><td>drilldowns</td></tr>
+<tr><td><code>DCGM_FI_DEV_GPU_TEMP</code></td><td>measure int C</td><td>71; 91 on <code>dc1-ucs-gpu-07 GPU5</code> at 14:49</td><td>node timeline</td></tr>
+<tr><td><code>DCGM_FI_DEV_SM_CLOCK</code></td><td>measure int MHz</td><td>1980</td><td>drilldowns</td></tr>
+<tr><td><code>storage_read_mbps</code> / <code>storage_write_mbps</code> / <code>storage_latency_ms</code></td><td>measure float</td><td>1840.0 / 420.0 / 2.3, on <code>gpu=GPU0</code> only (per node)</td><td>storage drilldowns</td></tr>
+</tbody></table>
+<h2>Index <code>ai_infra</code></h2>
+<h3><code>ai:gpu:fault</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>node</code></td><td>str</td><td><code>dc1-ucs-gpu-07</code></td><td>D infrastructure table, node timeline, A ECC/Xid, A thermal</td></tr>
+<tr><td><code>ai_pod</code></td><td>str</td><td><code>aipod-dc1</code></td><td>POD filter</td></tr>
+<tr><td><code>gpu</code></td><td>str</td><td><code>GPU5</code></td><td>table, A ECC/Xid</td></tr>
+<tr><td><code>fault</code></td><td>str</td><td><code>ecc_dbe_volatile</code>, <code>xid_79_fallen_off_bus</code>, <code>xid_48_dbe</code>, <code>ecc_sbe_rate_high</code>, <code>nvlink_crc_errors</code>, <code>thermal_throttle</code>, <code>power_cap_throttle</code></td><td>ECC / Xid Errors tile, faults chart (<code>fault_type</code>), table colour, A ECC/Xid, A thermal</td></tr>
+<tr><td><code>gpu_temp_c</code></td><td>int C</td><td>91</td><td>table colour (red &gt;= 90, orange &gt;= 85), A thermal</td></tr>
+<tr><td><code>severity</code></td><td>str</td><td><code>critical</code>, <code>high</code>, <code>medium</code>, <code>low</code> (background)</td><td>attention-first ordering, Degraded Nodes</td></tr>
+<tr><td><code>node_state</code></td><td>str</td><td><code>degraded</code> on the three degraded nodes, else <code>ok</code></td><td>Degraded Nodes tile</td></tr>
+<tr><td><code>fabric_link</code></td><td>str</td><td><code>dc1-leaf-112:Eth1/14</code></td><td>table (<code>fabric_link fabric_link_state</code>), joins <code>fabric_link_id</code> on Nexus events</td></tr>
+<tr><td><code>fabric_link_state</code></td><td>str</td><td><code>up</code>, <code>flapping</code></td><td>table</td></tr>
+<tr><td><code>xid</code></td><td>int</td><td>79, 48 (Xid faults only)</td><td>drilldowns</td></tr>
+<tr><td><code>message</code></td><td>str</td><td>free text</td><td>node timeline <code>detail</code></td></tr>
+</tbody></table>
+<h3><code>cisco:ucs:alarm</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>server</code></td><td>str</td><td><code>dc1-ucs-gpu-07</code> (aliased to <code>node</code>)</td><td>node timeline, landing-page counts</td></tr>
+<tr><td><code>ai_pod</code></td><td>str</td><td><code>aipod-dc1</code></td><td>filters</td></tr>
+<tr><td><code>severity</code></td><td>str</td><td><code>critical</code>, <code>major</code>, <code>minor</code>, <code>warning</code>, <code>info</code></td><td>node timeline</td></tr>
+<tr><td><code>code</code></td><td>str</td><td><code>F1236</code></td><td>drilldowns</td></tr>
+<tr><td><code>description</code></td><td>str</td><td>free text</td><td>drilldowns</td></tr>
+</tbody></table>
+<h3><code>cisco:ucs:inventory</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>server</code></td><td>str</td><td>aliased to <code>node</code></td><td>landing-page counts</td></tr>
+<tr><td><code>ai_pod</code></td><td>str</td><td><code>aipod-lab</code></td><td>filters</td></tr>
+<tr><td><code>model</code></td><td>str</td><td><code>UCS C885A M8</code>, <code>UCS C225 M8</code> (CPU nodes)</td><td>drilldowns</td></tr>
+<tr><td><code>gpu_model</code></td><td>str</td><td><code>H100-SXM-80GB</code></td><td>drilldowns</td></tr>
+<tr><td><code>gpu_count</code></td><td>int</td><td>8 (0 on CPU nodes)</td><td>drilldowns</td></tr>
+<tr><td><code>firmware</code></td><td>str</td><td><code>4.3(2b)</code></td><td>drilldowns</td></tr>
+<tr><td><code>leaf_switch</code> / <code>leaf_port</code></td><td>str</td><td><code>dc1-leaf-112</code> / <code>Eth1/14</code></td><td>link plan</td></tr>
+</tbody></table>
+<h3><code>cisco:ucs:audit</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>user</code></td><td>str</td><td><code>ucs-admin</code></td><td>drilldowns</td></tr>
+<tr><td><code>action</code></td><td>str</td><td><code>firmware.update</code>, <code>power.cycle</code>, <code>bios.update</code></td><td>drilldowns</td></tr>
+<tr><td><code>object</code></td><td>str</td><td><code>sys/chassis-1/blade-3</code></td><td>drilldowns</td></tr>
+<tr><td><code>server</code></td><td>str</td><td>aliased to <code>node</code></td><td>node timeline</td></tr>
+</tbody></table>
+<h2>Index <code>ai_network</code></h2>
+<h3><code>cisco:nexus:interface</code></h3>
+<p>One row per monitored link per interval (5 min, 1 min during 12:45-15:00 on the latest day; 15 min days 2-7; 60 min days 8-30). 1,152 links: dc1 4 leaves x 48 + 2 spines x 64, dc2 8 leaves x 48 + 2 spines x 64, lab 8 leaves x 40.</p>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>device</code></td><td>str</td><td><code>dc1-leaf-112</code></td><td>D network (device filter, table), drilldowns</td></tr>
+<tr><td><code>interface</code></td><td>str</td><td><code>Eth1/14</code></td><td>table, drilldowns</td></tr>
+<tr><td><code>peer</code></td><td>str</td><td><code>dc1-ucs-gpu-07</code> or a switch (<code>EVAL-node = coalesce(peer,null())</code> joins GPU servers)</td><td>node timeline</td></tr>
+<tr><td><code>fabric</code></td><td>str</td><td><code>aipod-dc1</code></td><td>fabric filter (<code>ai_pod</code> is also computed from <code>device</code>)</td></tr>
+<tr><td><code>speed_gbps</code></td><td>int</td><td>400</td><td>throughput chart</td></tr>
+<tr><td><code>in_util_pct</code> / <code>out_util_pct</code></td><td>float %</td><td>41.2 / 37.8</td><td>throughput chart (<code>(in+out)/200 x speed_gbps</code>)</td></tr>
+<tr><td><code>in_gbps</code> / <code>out_gbps</code></td><td>float</td><td>164.8 / 151.2</td><td>drilldowns</td></tr>
+<tr><td><code>ecn_marked_packets</code></td><td>int</td><td>0; up to 18K/min on <code>dc1-spine-02 Eth2/05</code> from 14:38</td><td>drilldowns</td></tr>
+<tr><td><code>pfc_pause_rx</code> / <code>pfc_pause_tx</code></td><td>int</td><td>storm on <code>dc1-leaf-112 Eth1/31</code> from 14:41 (day total 38.2K)</td><td>PFC Pause Frames tile</td></tr>
+<tr><td><code>crc_errors</code></td><td>int</td><td>rising on <code>dc2-leaf-207 Eth1/03</code></td><td>drilldowns</td></tr>
+<tr><td><code>link_state</code></td><td>str</td><td><code>up</code>, <code>down</code> (six down/up pairs on Eth1/14 14:40-14:49)</td><td>drilldowns</td></tr>
+<tr><td><code>optic_rx_power_dbm</code></td><td>float</td><td>-2.1; low on <code>lab-leaf-158 Eth1/09</code></td><td>drilldowns</td></tr>
+</tbody></table>
+<h3><code>cisco:nexus:anomaly</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>device</code> / <code>interface</code> / <code>peer</code> / <code>fabric</code></td><td>str</td><td>as above</td><td>D network table and chart, A congestion, A link flapping</td></tr>
+<tr><td><code>anomaly</code></td><td>str</td><td><code>congestion</code>, <code>pfc_pause_storm</code>, <code>link_flap</code>, <code>crc_errors</code>, <code>ecn_marked_packets high</code>, <code>optic rx power low</code></td><td>Congested Links, Link Flaps, anomalies chart (<code>anomaly_type</code>), table</td></tr>
+<tr><td><code>utilization</code></td><td>int %</td><td>97</td><td>table, A congestion (<code>&gt;= 90</code>)</td></tr>
+<tr><td><code>severity</code></td><td>str</td><td><code>critical</code>, <code>high</code>, <code>medium</code>, <code>low</code></td><td>attention-first ordering</td></tr>
+<tr><td><code>flap_count</code></td><td>int</td><td>6 on the scripted flap, 1 on singles</td><td>Link Flaps tile (<code>sum</code>), A link flapping</td></tr>
+<tr><td><code>source</code></td><td>str</td><td><code>nexus</code></td><td>table</td></tr>
+<tr><td><code>detail</code></td><td>str</td><td><code>flaps=6 in 10m</code></td><td>table label</td></tr>
+</tbody></table>
+<h3><code>cisco:nexus:config</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>device</code></td><td>str</td><td><code>dc1-leaf-112</code></td><td>D network table (<code>anomaly = &quot;config change: &quot;.change</code>), A configuration drift</td></tr>
+<tr><td><code>user</code></td><td>str</td><td><code>netops-jrivera</code></td><td>table, alert</td></tr>
+<tr><td><code>change</code></td><td>str</td><td><code>qos policy</code></td><td>table, alert</td></tr>
+<tr><td><code>diff_summary</code></td><td>str</td><td><code>policy-map QOS-AI-FABRIC: class AI-ROCE cs3 no-drop -&gt; drop</code></td><td>drilldown</td></tr>
+<tr><td><code>session_id</code></td><td>str</td><td>8 hex</td><td>drilldown</td></tr>
+<tr><td><code>source</code></td><td>str</td><td><code>nexus</code></td><td>table</td></tr>
+</tbody></table>
+<h3><code>ai:path:test</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>probe</code></td><td>str</td><td><code>probe-dc1</code>, <code>probe-dc2</code> (aliased to <code>device</code>)</td><td>table</td></tr>
+<tr><td><code>target</code></td><td>str</td><td><code>api.model-provider.example</code>, <code>users-west</code>, <code>cloud-east</code> (aliased to <code>peer</code>)</td><td>p95 Latency to Model APIs tile</td></tr>
+<tr><td><code>latency_ms</code></td><td>float</td><td>182.0 (322 on the 13:55 excursion)</td><td>tile, table</td></tr>
+<tr><td><code>loss_pct</code></td><td>float</td><td>0.0</td><td>drilldowns</td></tr>
+<tr><td><code>hops</code></td><td>int</td><td>12</td><td>drilldowns</td></tr>
+<tr><td><code>slow_hop</code></td><td>int or null</td><td>9</td><td>table (<code>latency +140 ms at hop 9</code>)</td></tr>
+<tr><td><code>slow_hop_delta_ms</code></td><td>int</td><td>140</td><td>table</td></tr>
+<tr><td><code>source</code></td><td>str</td><td><code>path_test</code></td><td>table</td></tr>
+</tbody></table>
+<h2>Index <code>ai_platform</code></h2>
+<h3><code>kube:events</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>reason</code></td><td>str</td><td><code>OOMKilled</code>, <code>NodeNotReady</code>, <code>CrashLoopBackOff</code>, <code>Evicted</code>, <code>BackOff</code>, <code>Scheduled</code>, <code>Pulled</code>, <code>SlowQueries</code></td><td>Pod Restarts tile, restarts chart, table, A restart storm</td></tr>
+<tr><td><code>namespace</code></td><td>str</td><td><code>inference</code>, <code>retrieval</code>, <code>mlops</code></td><td>namespace filter</td></tr>
+<tr><td><code>pod</code></td><td>str</td><td><code>med-advisor-v41-7c9f4</code></td><td>table, A restart storm</td></tr>
+<tr><td><code>workload</code></td><td>str</td><td><code>med-advisor-v41</code>, <code>vector-db-2</code></td><td>workload filter, table</td></tr>
+<tr><td><code>kind</code></td><td>str</td><td><code>inference</code>, <code>data service</code>, <code>evaluation</code>, <code>fine-tuning</code></td><td>table</td></tr>
+<tr><td><code>node</code></td><td>str</td><td><code>dc1-ucs-gpu-07</code>, <code>dc1-ucs-cpu-03</code></td><td>table, node timeline</td></tr>
+<tr><td><code>message</code></td><td>str</td><td>free text</td><td>node timeline</td></tr>
+<tr><td><code>impact</code></td><td>str</td><td><code>replica lost, 47 min degraded</code>, <code>restarted x3</code>, <code>retrieval timeouts</code></td><td>table</td></tr>
+<tr><td><code>restart_count</code></td><td>int</td><td>3 on the OOMKilled row, 0 on informational events</td><td>Pod Restarts tile (<code>sum</code>)</td></tr>
+<tr><td><code>severity</code></td><td>str</td><td><code>high</code> on the 14:44-14:50 rows, <code>medium</code> on job rows, <code>low</code></td><td>attention-first ordering</td></tr>
+<tr><td><code>type</code></td><td>str</td><td><code>Warning</code>, <code>Normal</code></td><td>drilldowns</td></tr>
+</tbody></table>
+<h3><code>ai:inference:server</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>model_server</code></td><td>str</td><td><code>med-advisor-v41</code>, <code>claims-v12</code>, <code>coder-v9</code> (aliased to <code>model</code>)</td><td>queue chart, Inference Replicas</td></tr>
+<tr><td><code>ai_pod</code></td><td>str</td><td><code>aipod-dc1</code></td><td>filters</td></tr>
+<tr><td><code>replicas_running</code></td><td>int</td><td>96 / 56 / 32 (182 total for 47 min after 14:50)</td><td>Inference Replicas Running (<code>latest BY model_server</code>, sum)</td></tr>
+<tr><td><code>queue_depth</code></td><td>int</td><td>10 baseline, 40 at the peak</td><td>queue chart</td></tr>
+<tr><td><code>queue_time_p95_ms</code></td><td>int</td><td>400 to 2,600</td><td>p95 Queue Time, A queue build-up (<code>&gt; 1500</code>)</td></tr>
+<tr><td><code>batch_size</code></td><td>int</td><td>16</td><td>drilldowns</td></tr>
+<tr><td><code>kv_cache_util_pct</code></td><td>float</td><td>71.4</td><td>drilldowns</td></tr>
+<tr><td><code>pending_gpu_pods</code></td><td>int</td><td>8 / 3 / 1 at the peak</td><td>Pending GPU Pods</td></tr>
+<tr><td><code>requests_per_s</code></td><td>float</td><td>5.6</td><td>drilldowns</td></tr>
+</tbody></table>
+<h3><code>ai:job:lifecycle</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>job_id</code></td><td>str</td><td><code>eval-reasoning-v41-0089</code>, <code>ft-claims-v13-s002</code></td><td>Failed Jobs (<code>dc</code>), table, evidence drilldown</td></tr>
+<tr><td><code>kind</code></td><td>str</td><td><code>fine-tuning</code>, <code>evaluation</code></td><td>table</td></tr>
+<tr><td><code>state</code></td><td>str</td><td><code>queued</code>, <code>running</code>, <code>checkpointing</code>, <code>retrying</code>, <code>completed</code>, <code>failed</code>, <code>preempted</code></td><td>Failed Jobs, table, A job failed</td></tr>
+<tr><td><code>node</code></td><td>str</td><td><code>lab-ucs-gpu-09</code></td><td>table, node timeline</td></tr>
+<tr><td><code>ai_pod</code></td><td>str</td><td><code>aipod-lab</code></td><td>filters</td></tr>
+<tr><td><code>gpu_hours</code></td><td>float</td><td>512 on the stalled fine-tune</td><td>alert key field</td></tr>
+<tr><td><code>gpus</code></td><td>int</td><td>8</td><td>drilldowns</td></tr>
+<tr><td><code>reason</code></td><td>str or null</td><td><code>HARNESS_EXIT_1</code>, <code>CHECKPOINT_IO_STALL</code>, <code>CUDA_OOM</code>, <code>PREEMPTED</code></td><td>table</td></tr>
+<tr><td><code>queue_wait_s</code></td><td>int</td><td>5400</td><td>Velocity drilldowns</td></tr>
+<tr><td><code>workload</code></td><td>str</td><td><code>eval-suite-v41</code></td><td>cost joins</td></tr>
+<tr><td><code>severity</code></td><td>str</td><td><code>medium</code> on scripted failures</td><td>ordering</td></tr>
+</tbody></table>
+<h2>Index <code>ai_application</code></h2>
+<h3><code>gen_ai:request</code></h3>
+<p>Per-minute aggregate rows (28 streams per minute carrying <code>request_count</code>) plus singleton rows (<code>request_count=1</code>) for failed requests, guardrail hits and the detailed incident rows; the row kind field below tells them apart.</p>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>gen_ai.app</code></td><td>str</td><td><code>medadvice-chat</code>, <code>claims-agent</code>, <code>search-rag</code>, <code>code-assist</code> (aliased to <code>app</code>)</td><td>D applications (filter, chart, table), A apps</td></tr>
+<tr><td><code>gen_ai.request.model</code></td><td>str</td><td><code>med-advisor-v41</code>, <code>med-advisor-v40</code>, <code>claims-v12</code>, <code>rag-embed-v7</code>, <code>coder-v9</code>, <code>provider-api-large</code> (aliased to <code>model</code>)</td><td>D applications, D models (Safety, Groundedness, Hallucination)</td></tr>
+<tr><td><code>gen_ai.system</code></td><td>str</td><td><code>self-hosted</code>, <code>provider</code></td><td>Token Spend (provider only carries cost)</td></tr>
+<tr><td><code>gen_ai.usage.input_tokens</code> / <code>gen_ai.usage.output_tokens</code></td><td>int</td><td>3,100 / 900 (provider ~40K)</td><td>Token Usage chart</td></tr>
+<tr><td><code>trace_id</code></td><td>str 12 hex</td><td><code>7f3a9c1e04b2</code></td><td>table, cross-sourcetype drilldown</td></tr>
+<tr><td><code>session_id</code></td><td>str 16 hex</td><td></td><td>drilldowns</td></tr>
+<tr><td><code>user_id</code></td><td>str</td><td><code>u_</code> + 12 hex (hashed)</td><td>drilldowns</td></tr>
+<tr><td><code>ttft_ms</code></td><td>int</td><td>480 baseline, ~1,400 in 13:00-15:00</td><td>p95 Time-to-First-Token, TTFT chart, A TTFT regression</td></tr>
+<tr><td><code>latency_ms</code></td><td>int</td><td>1,900</td><td>drilldowns</td></tr>
+<tr><td><code>retrieval_ms</code></td><td>int or <code>timeout</code></td><td>140; <code>timeout</code> on medadvice rows after 14:44</td><td>table, A retrieval timeouts</td></tr>
+<tr><td><code>status</code></td><td>str</td><td><code>ok</code>, <code>error</code>, <code>timeout</code></td><td>Availability, A error rate</td></tr>
+<tr><td><code>guardrail</code></td><td>str</td><td><code>pass</code>, <code>flagged:hallucination</code>, <code>blocked:prompt_injection</code>, <code>blocked:pii</code></td><td>table</td></tr>
+<tr><td><code>cost_usd</code></td><td>float</td><td>0.12 on provider rows, 0 self-hosted</td><td>Token Spend (24h)</td></tr>
+<tr><td><code>quality.hallucination_flag</code></td><td>int 0/1</td><td></td><td>Hallucination Rate, hallucination chart, A quality drift</td></tr>
+<tr><td><code>hallucination_count</code></td><td>int</td><td>flagged responses inside the aggregate</td><td>hallucination chart (per 1,000)</td></tr>
+<tr><td><code>quality.groundedness</code></td><td>float</td><td>0.961 (stored as a fraction; tiles multiply where needed)</td><td>Groundedness</td></tr>
+<tr><td><code>quality.safety_score</code></td><td>float</td><td>0.992</td><td>Safety Compliance, A safety compliance</td></tr>
+<tr><td><code>business_unit</code></td><td>str</td><td><code>customer-care</code>, <code>claims</code>, <code>engineering</code></td><td>business-unit filters</td></tr>
+<tr><td><code>cost_center</code></td><td>str</td><td><code>CC-5102</code></td><td>cost joins</td></tr>
+<tr><td><code>node</code></td><td>str</td><td>serving node</td><td>node timeline</td></tr>
+<tr><td><code>request_count</code></td><td>int</td><td>61 at 14:00, 19 at 02:00, 1 on singletons</td><td>Requests, Availability, Hallucination Rate</td></tr>
+<tr><td><code>row_kind</code></td><td>str</td><td><code>minute</code> (aggregate), <code>detail</code> (incident rows)</td><td>table (<code>detail</code> rows only)</td></tr>
+<tr><td><code>prompt_hash</code> / <code>prompt_len</code></td><td>str 16 hex / int</td><td>never the prompt itself</td><td>drilldowns</td></tr>
+</tbody></table>
+<h3><code>gen_ai:agent:run</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>gen_ai.agent.name</code></td><td>str</td><td><code>claims-intake-agent</code>, <code>care-navigator</code>, <code>it-helpdesk-agent</code>, <code>policy-qa-agent</code>, <code>scheduling-agent</code> (aliased to <code>agent</code>)</td><td>D agents (filter, completion bar, table), A agents</td></tr>
+<tr><td><code>trace_id</code></td><td>str</td><td><code>c41e77a09b3d</code></td><td>table, steps drilldown</td></tr>
+<tr><td><code>session_id</code></td><td>str</td><td></td><td>drilldowns</td></tr>
+<tr><td><code>steps</code></td><td>int</td><td>41 on the loop run, mean 6.4</td><td>Avg Steps per Task, table, A runaway loop (<code>&gt; 30</code>)</td></tr>
+<tr><td><code>tool_calls</code></td><td>int</td><td>38</td><td>table</td></tr>
+<tr><td><code>tool_call_failures</code></td><td>int</td><td>31</td><td>drilldowns</td></tr>
+<tr><td><code>top_tool</code> / <code>top_tool_calls</code></td><td>str / int</td><td><code>claims_api</code> / 31 (renders <code>38 (claims_api x31)</code>)</td><td>table</td></tr>
+<tr><td><code>outcome</code></td><td>str</td><td><code>completed</code>, <code>escalated_to_human</code>, <code>loop_stopped</code>, <code>blocked:guardrail</code>, <code>abandoned</code></td><td>Task Completion, Runaway Loops Stopped, outcome filter, A task completion, A runaway loop</td></tr>
+<tr><td><code>tokens</code></td><td>int</td><td>212,480</td><td>table, A runaway token spend</td></tr>
+<tr><td><code>cost_usd</code></td><td>float</td><td>3.12</td><td>table, A runaway token spend (<code>&gt; 2</code>)</td></tr>
+<tr><td><code>duration_ms</code></td><td>int</td><td></td><td>drilldowns</td></tr>
+<tr><td><code>gen_ai.request.model</code></td><td>str</td><td>model used by the agent</td><td>drilldowns</td></tr>
+<tr><td><code>business_unit</code></td><td>str</td><td></td><td>filters</td></tr>
+<tr><td><code>tools_used</code></td><td>array</td><td><code>[&quot;search_kb&quot;,&quot;claims_api&quot;]</code></td><td>drilldowns</td></tr>
+</tbody></table>
+<h3><code>gen_ai:agent:step</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>gen_ai.agent.name</code></td><td>str</td><td>aliased to <code>agent</code></td><td>Tool Call Failures</td></tr>
+<tr><td><code>trace_id</code></td><td>str</td><td>joins the run</td><td>steps drilldown</td></tr>
+<tr><td><code>step_no</code></td><td>int</td><td>1 … 41</td><td>steps drilldown</td></tr>
+<tr><td><code>gen_ai.operation.name</code></td><td>str</td><td><code>execute_tool</code>, <code>chat</code> (aliased to <code>operation</code>)</td><td>Tool Call Failures, tool-calls chart</td></tr>
+<tr><td><code>gen_ai.tool.name</code></td><td>str or null</td><td><code>search_kb</code>, <code>claims_api</code>, <code>ehr_lookup</code>, <code>send_notification</code> (aliased to <code>tool</code>)</td><td>tool-calls chart</td></tr>
+<tr><td><code>status</code></td><td>str</td><td><code>ok</code>, <code>error</code></td><td>Tool Call Failures</td></tr>
+<tr><td><code>error_type</code></td><td>str or null</td><td><code>http_503</code>, <code>timeout</code>, <code>schema_error</code></td><td>steps drilldown</td></tr>
+<tr><td><code>duration_ms</code> / <code>tokens</code></td><td>int</td><td></td><td>steps drilldown</td></tr>
+</tbody></table>
+<h3><code>gen_ai:guardrail</code></h3>
+<p>Only <code>flagged</code> and <code>blocked</code> verdicts are emitted (1,906 per day); <code>pass</code> is implied by the request rows.</p>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>trace_id</code></td><td>str</td><td>matches the request</td><td>cross-sourcetype drilldown</td></tr>
+<tr><td><code>gen_ai.app</code></td><td>str</td><td>aliased to <code>app</code></td><td>Guardrails Triggered, A guardrail surge</td></tr>
+<tr><td><code>gen_ai.request.model</code></td><td>str</td><td></td><td>drilldowns</td></tr>
+<tr><td><code>verdict</code></td><td>str</td><td><code>flagged</code>, <code>blocked</code></td><td>Guardrails Triggered, Prompt Injections Detected</td></tr>
+<tr><td><code>category</code></td><td>str</td><td><code>hallucination</code>, <code>prompt_injection</code>, <code>pii</code>, <code>toxicity</code>, <code>policy</code></td><td>Prompt Injections Detected, A prompt-injection campaign</td></tr>
+<tr><td><code>technique</code></td><td>str</td><td><code>instruction_override</code>, <code>role_play_jailbreak</code>, <code>encoded_payload</code>, <code>indirect_via_document</code>, <code>system_prompt_leak</code> (prompt injection only)</td><td>injections-by-technique bar</td></tr>
+<tr><td><code>src</code></td><td>str</td><td><code>203.0.113.10</code></td><td>A prompt-injection campaign, security drilldown</td></tr>
+<tr><td><code>user</code></td><td>str</td><td><code>probe@example.com</code></td><td>security drilldown</td></tr>
+<tr><td><code>action_taken</code></td><td>str</td><td><code>blocked_response</code>, <code>flag_for_review</code></td><td>drilldowns</td></tr>
+</tbody></table>
+<h2>Index <code>ai_model_eval</code></h2>
+<h3><code>ai:eval:run</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>job_id</code></td><td>str</td><td><code>eval-reasoning-v41-0089</code></td><td>table <code>evidence</code>, drilldown</td></tr>
+<tr><td><code>model_version</code></td><td>str</td><td><code>med-advisor-v41</code> (model filter)</td><td>table, pass-rate chart</td></tr>
+<tr><td><code>model</code></td><td>str</td><td><code>med-advisor</code> (base name, not aliased)</td><td>filters</td></tr>
+<tr><td><code>version</code></td><td>str</td><td><code>v37</code> … <code>v41</code> (<code>version_tag</code> calculated as fallback)</td><td>version filter, pass-rate chart</td></tr>
+<tr><td><code>suite</code></td><td>str</td><td><code>safety</code>, <code>reasoning</code>, <code>coding</code>, <code>groundedness</code></td><td>Score Drift (<code>suite=reasoning</code>), chart, table</td></tr>
+<tr><td><code>pass_rate</code></td><td>float %</td><td>91.9</td><td>Evaluation pass rate, chart, table</td></tr>
+<tr><td><code>baseline_pass_rate</code></td><td>float %</td><td>94.0</td><td>drilldown</td></tr>
+<tr><td><code>delta_vs_baseline</code></td><td>float pts</td><td>-2.1</td><td>Score Drift vs Baseline, table, A evaluation regression</td></tr>
+<tr><td><code>status</code></td><td>str</td><td><code>regression</code>, <code>within_band</code>, <code>improved</code>, <code>watch</code></td><td>table ordering, A evaluation regression</td></tr>
+<tr><td><code>evidence</code></td><td>str</td><td>= <code>job_id</code></td><td>table drilldown</td></tr>
+<tr><td><code>cycle_time_h</code></td><td>float</td><td>4.2</td><td>Evaluation Cycle Time</td></tr>
+<tr><td><code>queue_wait_h</code></td><td>float</td><td>1.5</td><td>Velocity drilldowns</td></tr>
+<tr><td><code>cases</code></td><td>int</td><td>2400</td><td>drilldown</td></tr>
+<tr><td><code>node</code></td><td>str</td><td><code>lab-ucs-gpu-04</code></td><td>node timeline</td></tr>
+</tbody></table>
+<h2>Index <code>ai_cost</code></h2>
+<h3><code>ai:cost:daily</code></h3>
+<p>One row per workload per day (the seven spec workloads plus the small dc2 workloads <code>serve-med-advisor-v40</code>, <code>serve-policy-qa-v3</code>, <code>dev-notebooks</code>) and one <code>workload=unallocated</code> row per AI POD carrying the idle hours.</p>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>day</code></td><td>str</td><td><code>2026-09-17</code></td><td>daily chart</td></tr>
+<tr><td><code>workload</code></td><td>str</td><td><code>serve-med-advisor-v41</code>, <code>unallocated</code></td><td>Top Workloads table, drilldown</td></tr>
+<tr><td><code>business_unit</code></td><td>str</td><td><code>customer-care</code>, <code>claims</code>, <code>engineering</code>, <code>data-science</code></td><td>GPU-Hours by Business Unit, BU filter, A spend spike</td></tr>
+<tr><td><code>cost_center</code></td><td>str</td><td><code>CC-5102</code></td><td>table</td></tr>
+<tr><td><code>kind</code></td><td>str</td><td><code>inference</code>, <code>evaluation</code>, <code>fine-tuning</code>, <code>unallocated</code></td><td>table, Tokens per GPU-Second (<code>kind=inference</code>)</td></tr>
+<tr><td><code>ai_pod</code></td><td>str</td><td><code>aipod-dc1</code></td><td><code>gpu_rate_card</code> lookup, Idle GPU-Hours filter</td></tr>
+<tr><td><code>gpu_hours</code></td><td>float</td><td>3072.0 (0 on unallocated rows)</td><td>GPU-Hours Allocated (7d), table, A idle reservation</td></tr>
+<tr><td><code>idle_gpu_hours</code></td><td>float</td><td>0 on workload rows; unallocated GPUs x 24 on the idle rows</td><td>Idle GPU-Hours (7d), A idle reservation</td></tr>
+<tr><td><code>avg_gpu_util</code></td><td>float %</td><td>58.0</td><td>table, A idle reservation</td></tr>
+<tr><td><code>usd_per_gpu_hour</code></td><td>float</td><td>2.40 (the lookup value wins when present)</td><td>est cost</td></tr>
+<tr><td><code>est_cost_usd</code></td><td>float</td><td>7372.8</td><td>table, A spend spike</td></tr>
+</tbody></table>
+<h3><code>ai:cost:tokens</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>day</code></td><td>str</td><td><code>2026-09-17</code></td><td>7-day sums</td></tr>
+<tr><td><code>model</code></td><td>str</td><td><code>provider-api-large</code>, <code>med-advisor-v41</code>, <code>claims-v12</code>, <code>coder-v9</code>, <code>rag-embed-v7</code></td><td>Cost per 1M Tokens bar, Model API Spend</td></tr>
+<tr><td><code>gen_ai.system</code></td><td>str</td><td><code>provider</code>, <code>self-hosted</code> (<code>self_hosted</code> calculated 0/1)</td><td>Cost per 1M Tokens (self-hosted)</td></tr>
+<tr><td><code>tokens_millions</code></td><td>float</td><td>412.5</td><td>Cost per 1M Tokens, Tokens per GPU-Second</td></tr>
+<tr><td><code>cost_usd</code></td><td>float</td><td>30,300 per day on the provider row</td><td>Model API Spend (7d), Cost per 1M Tokens</td></tr>
+<tr><td><code>cost_per_1m_tokens</code></td><td>float</td><td>3.00 / 1.32 / 0.71 / 0.64 / 0.12</td><td>bar chart</td></tr>
+<tr><td><code>gpu_seconds</code></td><td>float</td><td>serving compute attributed to the tokens (total = tokens / 2,140)</td><td>Tokens per GPU-Second</td></tr>
+</tbody></table>
+<h2>Index <code>ai_security</code></h2>
+<h3><code>aws:cloudtrail:sim</code>, <code>k8s:audit:sim</code>, <code>iam:sim</code> (raw events)</h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Sourcetype</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>user</code></td><td>str</td><td>all</td><td><code>svc-mlops-ci</code>, <code>maya.okonkwo@buttercupgames.com</code></td><td>user filter, security drilldown, A security (all)</td></tr>
+<tr><td><code>src</code></td><td>str</td><td>all</td><td><code>10.42.17.88</code>, <code>198.51.100.20</code></td><td>drilldown</td></tr>
+<tr><td><code>action</code></td><td>str</td><td>all</td><td><code>s3:GetObject</code>, <code>egress</code>, <code>kubectl exec</code>, <code>assume_role</code>, <code>api_key.created</code></td><td>A first-seen weights, A credential misuse, A data movement</td></tr>
+<tr><td><code>object</code></td><td>str</td><td>all</td><td><code>weights/med-advisor-v41/</code>, <code>bucket/rag-corpus-clinical</code>, <code>pod/med-advisor-v41-7c9f4</code>, <code>role/weights-reader</code>, <code>model-registry/prod</code></td><td>alerts, findings</td></tr>
+<tr><td><code>environment</code></td><td>str</td><td>all</td><td><code>production</code> (aliased to <code>env</code>)</td><td>environment filter</td></tr>
+<tr><td><code>outcome</code></td><td>str</td><td>all</td><td><code>success</code>, <code>denied</code></td><td>drilldown</td></tr>
+<tr><td><code>bytes_out</code></td><td>int</td><td>cloudtrail</td><td>44023414784 (41 GB; <code>bytes_out_gb</code> calculated)</td><td>A data movement (<code>&gt; 10737418240</code>)</td></tr>
+<tr><td><code>asn</code> / <code>asn_new</code></td><td>int / bool</td><td>cloudtrail</td><td>16509 / true</td><td>A data movement</td></tr>
+<tr><td><code>first_seen</code></td><td>bool</td><td>cloudtrail, iam</td><td>true on the scripted weights read and role assumption</td><td>A first-seen weights, A credential misuse</td></tr>
+<tr><td><code>region</code></td><td>str</td><td>cloudtrail</td><td><code>us-west-2</code></td><td>drilldown</td></tr>
+<tr><td><code>namespace</code></td><td>str</td><td>k8s</td><td><code>inference</code></td><td>drilldown</td></tr>
+<tr><td><code>off_hours</code></td><td>bool</td><td>k8s</td><td>true on the 14:37 exec</td><td>A credential misuse</td></tr>
+</tbody></table>
+<h3><code>ai:security:finding</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>finding_id</code></td><td>str</td><td><code>F-20260918-0007</code>; alerts derive the same id from <code>user.action.object.day</code> so reruns dedup</td><td>Open Findings (<code>latest(status) BY finding_id</code>), category tiles (<code>dc</code>)</td></tr>
+<tr><td><code>user</code> / <code>src</code> / <code>action</code> / <code>object</code></td><td>str</td><td>as in the raw events; <code>action</code> is the display label (<code>s3:GetObject (first seen)</code>, <code>prompt_injection x38</code>)</td><td>Recent Findings table, drilldown</td></tr>
+<tr><td><code>risk_score</code></td><td>int</td><td>80, 75, 70, 65, 60, 40</td><td>table colour (red &gt;= 75, orange &gt;= 60, yellow &gt;= 40)</td></tr>
+<tr><td><code>rule</code></td><td>str</td><td>the alert title, e.g. <code>AI Security - First-seen access to model weights</code></td><td>findings-by-rule chart</td></tr>
+<tr><td><code>category</code></td><td>str</td><td><code>model_asset_access</code>, <code>credential_misuse</code>, <code>data_movement</code>, <code>off_hours_admin</code>, <code>prompt_injection</code></td><td>Model Asset Access Anomalies, Credential Misuse, Data Movement Alerts, stacked chart</td></tr>
+<tr><td><code>mitre_technique</code></td><td>str</td><td><code>T1530</code>, <code>T1078</code>, <code>T1567</code>, <code>AML.T0051</code></td><td>table drilldown, ES annotations</td></tr>
+<tr><td><code>status</code></td><td>str</td><td><code>open</code>, <code>closed</code></td><td>Open Findings</td></tr>
+<tr><td><code>triage_disposition</code></td><td>str</td><td><code>true_positive</code>, <code>needs_review</code>, <code>benign</code></td><td>table</td></tr>
+<tr><td><code>owner</code></td><td>str</td><td><code>soc-tier1</code>, <code>soc-tier2</code></td><td>table</td></tr>
+<tr><td><code>environment</code></td><td>str</td><td><code>production</code> (aliased to <code>env</code>)</td><td>environment filter</td></tr>
+<tr><td><code>scoreboard</code></td><td>str</td><td><code>security</code></td><td>Security scoreboard</td></tr>
+<tr><td><code>risk_object</code> / <code>risk_object_type</code></td><td>str</td><td>= <code>user</code> / <code>user</code> (calculated for ES)</td><td>ES risk events</td></tr>
+</tbody></table>
+<h2>Index <code>ai_summary</code></h2>
+<h3><code>ai:scoreboard</code></h3>
+<p>Written by the five <code>AI Scoreboard - *</code> rollups every 15 minutes, seeded with 60 days of daily history (plus a weekly GPU-utilization series 54.1 to 61.8).</p>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>scoreboard</code></td><td>str</td><td><code>reliability</code>, <code>velocity</code>, <code>efficiency</code>, <code>trust</code>, <code>security</code></td><td>executive tiles, landing page</td></tr>
+<tr><td><code>metric</code></td><td>str</td><td><code>Availability</code>, <code>p95 time-to-first-token</code>, <code>Degraded nodes</code>, <code>Congested links</code>, <code>Pilot to production</code>, <code>Evaluation cycle time</code>, <code>Evaluation pass rate</code>, <code>GPU utilization</code>, <code>Idle GPU-hours</code>, <code>Token spend</code>, <code>Safety compliance</code>, <code>Hallucination rate</code>, <code>Guardrails triggered</code>, <code>Open findings</code>, <code>Model asset access anomalies</code>, <code>Prompt injections detected</code></td><td>executive tiles</td></tr>
+<tr><td><code>value</code></td><td>float</td><td>99.93</td><td>executive tiles, GPU utilization vs target chart, smoke equality check</td></tr>
+<tr><td><code>unit</code></td><td>str</td><td><code>pct</code>, <code>ms</code>, <code>count</code>, <code>days</code>, <code>h</code>, <code>usd</code>, <code>gpu_h</code></td><td>tiles</td></tr>
+<tr><td><code>window</code></td><td>str</td><td><code>24h</code>, <code>7d</code>, <code>30d</code></td><td>tiles</td></tr>
+<tr><td><code>business_unit</code> / <code>environment</code></td><td>str</td><td><code>all</code> / <code>production</code></td><td>executive filters</td></tr>
+</tbody></table>
+<h3><code>ai:incident</code></h3>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>week</code></td><td>str</td><td><code>2026-W37</code></td><td>incidents chart</td></tr>
+<tr><td><code>week_start</code></td><td>str</td><td><code>2026-09-07</code></td><td>incidents chart (<code>timechart span=1w</code>)</td></tr>
+<tr><td><code>root_cause_layer</code></td><td>str</td><td><code>compute</code>, <code>network</code>, <code>platform</code>, <code>application</code>, <code>model</code></td><td>incidents chart</td></tr>
+<tr><td><code>count</code></td><td>int</td><td>weekly totals 31, 29, 27, 24, 22, 20, 18</td><td>incidents chart</td></tr>
+</tbody></table>
+<h3><code>ai:alert</code></h3>
+<p>Written by the <code>logevent</code> action of every alert (one event per result).</p>
+<table><thead><tr><th>Field</th><th>Type</th><th>Values / example</th><th>Used by</th></tr></thead><tbody>
+<tr><td><code>search_name</code></td><td>str</td><td>the alert title</td><td>smoke alert coverage, landing page</td></tr>
+<tr><td><code>severity</code></td><td>str</td><td><code>low</code>, <code>medium</code>, <code>high</code>, <code>critical</code></td><td>drilldowns</td></tr>
+<tr><td><code>layer</code></td><td>str</td><td><code>compute</code> … <code>security</code>, <code>cost</code></td><td>drilldowns</td></tr>
+<tr><td><code>dashboard</code></td><td>str</td><td>owning dashboard id</td><td>drilldowns</td></tr>
+<tr><td>key fields</td><td>mixed</td><td><code>node</code>, <code>gpu</code>, <code>device</code>, <code>interface</code>, <code>pod</code>, <code>gen_ai.app</code>, <code>trace_id</code>, <code>user</code>, <code>src</code>, … per alert</td><td>drilldowns</td></tr>
+</tbody></table>
+<h2>Aliases and calculated fields (<code>default/props.conf</code>)</h2>
+<table><thead><tr><th>Sourcetype</th><th>Field</th><th>Source</th><th>Definition</th></tr></thead><tbody>
+<tr><td>every sourcetype</td><td><code>layer</code></td><td>EVAL</td><td>constant per sourcetype (<code>compute</code>, <code>network</code>, <code>platform</code>, <code>application</code>, <code>model</code>, <code>agent</code>, <code>efficiency</code>, <code>security</code>, <code>summary</code>)</td></tr>
+<tr><td>every sourcetype</td><td><code>layer_no</code>, <code>dashboard</code></td><td>LOOKUP</td><td><code>ai_layer_map sourcetype OUTPUTNEW layer_no dashboard</code></td></tr>
+<tr><td><code>ai:gpu:fault</code></td><td><code>fabric_link_id</code></td><td>EVAL</td><td><code>fabric_link</code> (joins Nexus events)</td></tr>
+<tr><td><code>ai:gpu:fault</code></td><td><code>fault_type</code></td><td>EVAL</td><td><code>ecc_dbe</code>, <code>ecc</code>, <code>xid</code>, <code>nvlink</code>, <code>thermal_throttle</code>, <code>power_cap_throttle</code>, <code>other</code></td></tr>
+<tr><td><code>ai:gpu:fault</code>, <code>kube:events</code>, <code>ai:job:lifecycle</code>, <code>gen_ai:request</code>, UCS</td><td><code>server_model</code>, <code>gpu_model</code>, <code>leaf_switch</code>, <code>leaf_port</code>, <code>cost_center</code></td><td>LOOKUP</td><td><code>ai_node_inventory node OUTPUTNEW …</code></td></tr>
+<tr><td><code>cisco:ucs:*</code></td><td><code>node</code></td><td>FIELDALIAS</td><td><code>server AS node</code></td></tr>
+<tr><td><code>cisco:nexus:interface</code>, <code>cisco:nexus:anomaly</code></td><td><code>node</code></td><td>EVAL</td><td><code>coalesce(peer, null())</code> (switch rows keep <code>device</code>)</td></tr>
+<tr><td><code>cisco:nexus:interface</code>, <code>cisco:nexus:anomaly</code></td><td><code>fabric_link_id</code></td><td>EVAL</td><td><code>device.&quot;:&quot;.interface</code></td></tr>
+<tr><td><code>cisco:nexus:*</code></td><td><code>ai_pod</code>, <code>fabric</code></td><td>EVAL</td><td>from the <code>device</code> prefix (<code>dc1-</code>, <code>dc2-</code>, <code>lab-</code>)</td></tr>
+<tr><td><code>cisco:nexus:interface</code></td><td><code>pfc_pause_total</code>, <code>throughput_gbps</code></td><td>EVAL</td><td><code>rx+tx</code>; <code>(in+out)/200 x speed_gbps</code></td></tr>
+<tr><td><code>cisco:nexus:anomaly</code></td><td><code>anomaly_type</code></td><td>EVAL</td><td>folds <code>ecn_marked_packets high</code> into <code>congestion</code>, <code>optic rx power low</code> into <code>optic</code></td></tr>
+<tr><td><code>cisco:nexus:config</code></td><td><code>anomaly</code></td><td>EVAL</td><td><code>&quot;config change: &quot;.change</code></td></tr>
+<tr><td><code>ai:path:test</code></td><td><code>device</code>, <code>peer</code>, <code>anomaly</code></td><td>EVAL</td><td><code>probe</code>; <code>target</code>; <code>&quot;latency +&lt;delta&gt; ms at hop &lt;n&gt;&quot;</code></td></tr>
+<tr><td><code>ai:inference:server</code></td><td><code>model</code>, <code>workload</code></td><td>FIELDALIAS / EVAL</td><td><code>model_server AS model</code>; <code>&quot;serve-&quot;.model_server</code></td></tr>
+<tr><td><code>ai:job:lifecycle</code></td><td><code>workload</code></td><td>EVAL</td><td><code>job_id</code></td></tr>
+<tr><td><code>gen_ai:request</code></td><td><code>app</code>, <code>model</code>, <code>input_tokens</code>, <code>output_tokens</code></td><td>FIELDALIAS</td><td>from the <code>gen_ai.*</code> fields</td></tr>
+<tr><td><code>gen_ai:request</code></td><td><code>total_tokens</code>, <code>is_error</code>, <code>error_count</code>, <code>retrieval_timeout</code></td><td>EVAL</td><td>token sum; <code>status IN (error,timeout)</code>; <code>error_count</code> weighted by <code>request_count</code></td></tr>
+<tr><td><code>gen_ai:request</code>, <code>gen_ai:guardrail</code></td><td><code>owner</code>, <code>tier</code>, <code>in_customer_path</code></td><td>LOOKUP</td><td><code>ai_application_catalog gen_ai.app OUTPUTNEW …</code></td></tr>
+<tr><td><code>ai:eval:run</code></td><td><code>version_tag</code></td><td>EVAL</td><td><code>coalesce(version, &lt;suffix of model_version&gt;)</code></td></tr>
+<tr><td><code>gen_ai:agent:run</code></td><td><code>agent</code>, <code>completed</code>, <code>tool_calls_label</code></td><td>FIELDALIAS / EVAL</td><td><code>gen_ai.agent.name AS agent</code>; <code>outcome==&quot;completed&quot;</code>; <code>38 (claims_api x31)</code></td></tr>
+<tr><td><code>gen_ai:agent:step</code></td><td><code>agent</code>, <code>tool</code>, <code>operation</code></td><td>FIELDALIAS</td><td><code>gen_ai.agent.name</code>, <code>gen_ai.tool.name</code>, <code>gen_ai.operation.name</code></td></tr>
+<tr><td><code>ai:cost:daily</code></td><td><code>ai_pod</code>, <code>rate_card_usd_per_gpu_hour</code></td><td>EVAL / LOOKUP</td><td>POD inferred from the workload when absent; <code>gpu_rate_card ai_pod OUTPUTNEW usd_per_gpu_hour</code></td></tr>
+<tr><td><code>ai:cost:tokens</code></td><td><code>self_hosted</code></td><td>EVAL</td><td><code>model!=&quot;provider-api-large&quot;</code></td></tr>
+<tr><td>security sourcetypes</td><td><code>env</code></td><td>FIELDALIAS</td><td><code>environment AS env</code></td></tr>
+<tr><td><code>aws:cloudtrail:sim</code></td><td><code>bytes_out_gb</code></td><td>EVAL</td><td><code>round(bytes_out/1073741824)</code></td></tr>
+<tr><td><code>ai:security:finding</code></td><td><code>risk_object</code>, <code>risk_object_type</code></td><td>EVAL</td><td><code>user</code>; <code>&quot;user&quot;</code></td></tr>
+</tbody></table>
+<p>Event types <code>ai_layer_compute</code> … <code>ai_layer_agent</code> (index + sourcetype searches, no pipes) carry tags <code>ai_layer</code> and the layer name (<code>compute</code>, <code>network</code>, <code>platform</code>, <code>application</code>, <code>model</code>, <code>agent</code>) through <code>tags.conf</code>.</p>
+</main></body></html>

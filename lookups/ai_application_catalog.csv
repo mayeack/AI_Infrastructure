@@ -1,0 +1,6 @@
+gen_ai.app,model,business_unit,cost_center,owner,tier,in_customer_path,pilot_start_date,production_date
+medadvice-chat,med-advisor-v41,customer-care,CC-5102,care-platform,1,true,2026-05-04,2026-06-11
+claims-agent,claims-v12,claims,CC-4523,claims-automation,1,true,2026-03-02,2026-04-13
+search-rag,rag-embed-v7,customer-care,CC-5102,care-platform,2,true,2026-06-01,2026-07-03
+code-assist,coder-v9,engineering,CC-6010,dev-productivity,3,false,2026-01-12,2026-03-23
+provider-api,provider-api-large,mixed,CC-5102,ai-platform,2,true,2026-07-06,2026-08-13

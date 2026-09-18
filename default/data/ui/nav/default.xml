@@ -1,0 +1,12 @@
+<nav search_view="search" color="#0B5CAB">
+  <view name="ai_stack_overview" default="true"/>
+  <view name="ai_infrastructure_health"/>
+  <view name="ai_network_fabric"/>
+  <view name="ai_platform_workloads"/>
+  <view name="ai_applications"/>
+  <view name="model_performance_quality"/>
+  <view name="ai_agents"/>
+  <view name="ai_cost_unit_economics"/>
+  <view name="ai_security_posture"/>
+  <view name="ai_operations_executive_overview"/>
+</nav>

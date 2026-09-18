@@ -1,0 +1,32 @@
+[]
+access = read : [ * ], write : [ admin, sc_admin ]
+export = system
+
+[props]
+export = system
+
+[transforms]
+export = system
+
+[lookups]
+export = system
+
+[macros]
+export = system
+
+[eventtypes]
+export = system
+
+[tags]
+export = system
+
+[savedsearches]
+export = none
+
+[views]
+access = read : [ * ], write : [ admin, sc_admin ]
+export = none
+
+[nav]
+access = read : [ * ], write : [ admin, sc_admin ]
+export = none

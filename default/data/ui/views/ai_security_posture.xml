@@ -1,0 +1,491 @@
+<dashboard version="2" theme="dark">
+<label>AI Security Posture</label>
+<description>Access to model assets and AI data, credential misuse, data movement and prompt-injection activity, joined with IAM and network data</description>
+<definition><![CDATA[
+{
+ "title": "AI Security Posture",
+ "description": "Access to model assets and AI data, credential misuse, data movement and prompt-injection activity, joined with IAM and network data",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-7d@d,now"
+   }
+  },
+  "input_env": {
+   "type": "input.multiselect",
+   "title": "Environment",
+   "options": {
+    "token": "env",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.environment",
+    "label": "primary.environment"
+   },
+   "dataSources": {
+    "primary": "ds_envs"
+   }
+  },
+  "input_user": {
+   "type": "input.text",
+   "title": "User filter",
+   "options": {
+    "token": "user",
+    "defaultValue": "*"
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_envs": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_security_findings` | stats count BY environment | fields environment",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Environments"
+  },
+  "ds_kpi_open": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_open_findings($env$,$user$)`"
+   },
+   "name": "Open Findings"
+  },
+  "ds_kpi_model_asset": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_model_asset_anomalies($env$,$user$)`"
+   },
+   "name": "Model Asset Access Anomalies"
+  },
+  "ds_kpi_credential": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_credential_misuse($env$,$user$)`"
+   },
+   "name": "Credential Misuse"
+  },
+  "ds_kpi_data_movement": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_data_movement_alerts($env$,$user$)`"
+   },
+   "name": "Data Movement Alerts"
+  },
+  "ds_kpi_injections": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_prompt_injections($env$)`"
+   },
+   "name": "Prompt Injections Detected"
+  },
+  "ds_findings_over_time": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_security_findings` environment IN ($env$) user=\"$user$\" category IN (\"model_asset_access\",\"credential_misuse\",\"data_movement\",\"off_hours_admin\") | timechart span=1d dc(finding_id) BY category | table _time model_asset_access credential_misuse data_movement off_hours_admin"
+   },
+   "name": "Model Asset and Identity Events Over Time"
+  },
+  "ds_injections_by_technique": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_guardrails` category=prompt_injection verdict=blocked | stats count BY technique | sort - count | table technique count"
+   },
+   "name": "Prompt Injections by Technique"
+  },
+  "ds_findings_table": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_security_findings` environment IN ($env$) user=\"$user$\" | eval fkey=user.\"|\".src.\"|\".object.\"|\".strftime(_time,\"%Y%m%d\") | dedup fkey | sort 0 -_time | head 25 | eval _time=strftime(_time,\"%Y-%m-%d %H:%M:%S.%3N\") | table _time user src action object risk_score triage_disposition"
+   },
+   "name": "Recent Findings (Enterprise Security)"
+  }
+ },
+ "visualizations": {
+  "viz_kpi_open": {
+   "type": "splunk.singlevalue",
+   "title": "Open Findings",
+   "dataSources": {
+    "primary": "ds_kpi_open"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "to": 10,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 10,
+      "to": 30,
+      "value": "#F1813F"
+     },
+     {
+      "from": 30,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_model_asset": {
+   "type": "splunk.singlevalue",
+   "title": "Model Asset Access Anomalies",
+   "dataSources": {
+    "primary": "ds_kpi_model_asset"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_credential": {
+   "type": "splunk.singlevalue",
+   "title": "Credential Misuse",
+   "dataSources": {
+    "primary": "ds_kpi_credential"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_data_movement": {
+   "type": "splunk.singlevalue",
+   "title": "Data Movement Alerts",
+   "dataSources": {
+    "primary": "ds_kpi_data_movement"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "to": 5,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 5,
+      "value": "#F1813F"
+     }
+    ]
+   }
+  },
+  "viz_kpi_injections": {
+   "type": "splunk.singlevalue",
+   "title": "Prompt Injections Detected",
+   "dataSources": {
+    "primary": "ds_kpi_injections"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 50,
+      "value": "#53A051"
+     },
+     {
+      "from": 50,
+      "to": 100,
+      "value": "#F1813F"
+     },
+     {
+      "from": 100,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_findings_over_time": {
+   "type": "splunk.column",
+   "title": "Model Asset and Identity Events Over Time",
+   "dataSources": {
+    "primary": "ds_findings_over_time"
+   },
+   "options": {
+    "stackMode": "stacked",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "findings per day",
+    "seriesColorsByField": {
+     "model_asset_access": "#7B56DB",
+     "credential_misuse": "#CB2196",
+     "data_movement": "#00CDAF",
+     "off_hours_admin": "#DD9900"
+    }
+   }
+  },
+  "viz_injections_by_technique": {
+   "type": "splunk.bar",
+   "title": "Prompt Injections by Technique",
+   "dataSources": {
+    "primary": "ds_injections_by_technique"
+   },
+   "options": {
+    "stackMode": "auto",
+    "dataValuesDisplay": "all",
+    "seriesColors": [
+     "#FF677B"
+    ],
+    "legendDisplay": "off",
+    "xAxisTitleText": "blocked attempts",
+    "yAxisTitleText": ""
+   }
+  },
+  "viz_findings_table": {
+   "type": "splunk.table",
+   "title": "Recent Findings (Enterprise Security)",
+   "dataSources": {
+    "primary": "ds_findings_table"
+   },
+   "options": {
+    "count": 25,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "risk_score": {
+      "rowColors": "> table | seriesByName('risk_score') | rangeValue(riskCfg)",
+      "align": "right",
+      "width": 100
+     },
+     "triage_disposition": {
+      "rowColors": "> table | seriesByName('triage_disposition') | matchValue(triageCfg)",
+      "width": 150
+     }
+    }
+   },
+   "context": {
+    "riskCfg": [
+     {
+      "to": 40,
+      "value": "#FFFFFF"
+     },
+     {
+      "from": 40,
+      "to": 60,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 60,
+      "to": 75,
+      "value": "#F1813F"
+     },
+     {
+      "from": 75,
+      "value": "#E0453A"
+     }
+    ],
+    "triageCfg": [
+     {
+      "match": "true_positive",
+      "value": "#E0453A"
+     },
+     {
+      "match": "needs_review",
+      "value": "#F8BE34"
+     },
+     {
+      "match": "benign",
+      "value": "#53A051"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToSearch",
+     "options": {
+      "search": "(`ai_security_idx` user=\"$row.user.value$\" src=\"$row.src.value$\") OR (`ai_guardrails` src=\"$row.src.value$\") | table _time sourcetype user src action object bytes_out asn first_seen off_hours category technique verdict | sort 0 _time",
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$",
+      "openInNewTab": true
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 850,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_env",
+   "input_user"
+  ],
+  "structure": [
+   {
+    "item": "viz_kpi_open",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_model_asset",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_credential",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_data_movement",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_injections",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_findings_over_time",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_injections_by_technique",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_findings_table",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 450,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>

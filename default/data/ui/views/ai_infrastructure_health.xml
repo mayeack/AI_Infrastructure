@@ -1,0 +1,478 @@
+<dashboard version="2" theme="dark">
+<label>AI Infrastructure Health</label>
+<description>GPU, server and storage health across Cisco AI PODs serving inference, evaluation and fine-tuning</description>
+<definition><![CDATA[
+{
+ "title": "AI Infrastructure Health",
+ "description": "GPU, server and storage health across Cisco AI PODs serving inference, evaluation and fine-tuning",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-24h,now"
+   }
+  },
+  "input_pod": {
+   "type": "input.multiselect",
+   "title": "AI POD",
+   "options": {
+    "token": "pod",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.ai_pod",
+    "label": "primary.ai_pod"
+   },
+   "dataSources": {
+    "primary": "ds_pods"
+   }
+  },
+  "input_node": {
+   "type": "input.text",
+   "title": "Node filter",
+   "options": {
+    "token": "node",
+    "defaultValue": "*"
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_pods": {
+   "type": "ds.search",
+   "options": {
+    "query": "| inputlookup ai_node_inventory | stats count BY ai_pod | fields ai_pod",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "AI PODs"
+  },
+  "ds_kpi_gpus": {
+   "type": "ds.search",
+   "options": {
+    "query": "| `ai_kpi_gpus_monitored($pod$,$node$)`"
+   },
+   "name": "GPUs Monitored"
+  },
+  "ds_kpi_util": {
+   "type": "ds.search",
+   "options": {
+    "query": "| `ai_kpi_gpu_util_avg($pod$,$node$)`"
+   },
+   "name": "Avg GPU Utilization"
+  },
+  "ds_kpi_idle": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_idle_gpu_hours_7d($pod$)`",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Idle GPU-Hours (7d)"
+  },
+  "ds_kpi_degraded": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_degraded_nodes($pod$,$node$)`"
+   },
+   "name": "Degraded Nodes"
+  },
+  "ds_kpi_ecc": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_kpi_ecc_xid_errors($pod$,$node$)`"
+   },
+   "name": "ECC / Xid Errors (24h)"
+  },
+  "ds_util_by_pod": {
+   "type": "ds.search",
+   "options": {
+    "query": "| mstats avg(DCGM_FI_DEV_GPU_UTIL) AS util WHERE `ai_gpu_metrics` ai_pod IN ($pod$) node=\"$node$\" NOT workload=\"unallocated\" BY ai_pod span=1h | timechart span=1h avg(util) BY ai_pod | foreach aipod-* [eval <<FIELD>>=round('<<FIELD>>',1)]"
+   },
+   "name": "GPU Utilization by AI POD (%)"
+  },
+  "ds_faults_over_time": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_gpu_fault` ai_pod IN ($pod$) node=\"$node$\" | eval fault_type=case(like(fault,\"ecc_%\"),\"ecc_dbe\",like(fault,\"xid_%\"),\"xid\",fault=\"nvlink_crc_errors\",\"nvlink\",true(),\"thermal_throttle\") | timechart span=1h count BY fault_type | table _time ecc_dbe xid nvlink thermal_throttle"
+   },
+   "name": "Hardware Faults by Type Over Time"
+  },
+  "ds_nodes_table": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_gpu_fault` ai_pod IN ($pod$) node=\"$node$\" | dedup node gpu fault sortby +_time | eval fabric_link=coalesce(fabric_link.\" \".coalesce(fabric_link_state,\"up\"),\"-\"), rank=case(severity==\"critical\",0,severity==\"high\",1,severity==\"medium\",2,true(),3) | sort 0 rank -_time | fields - rank | head 25 | eval _time=strftime(_time,\"%Y-%m-%d %H:%M:%S.%3N\") | table _time node ai_pod gpu fault gpu_temp_c fabric_link severity"
+   },
+   "name": "Nodes Needing Attention"
+  }
+ },
+ "visualizations": {
+  "viz_kpi_gpus": {
+   "type": "splunk.singlevalue",
+   "title": "GPUs Monitored",
+   "dataSources": {
+    "primary": "ds_kpi_gpus"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#FFFFFF"
+   }
+  },
+  "viz_kpi_util": {
+   "type": "splunk.singlevalue",
+   "title": "Avg GPU Utilization",
+   "dataSources": {
+    "primary": "ds_kpi_util"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 1,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 50,
+      "value": "#F1813F"
+     },
+     {
+      "from": 50,
+      "to": 65,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 65,
+      "value": "#53A051"
+     }
+    ]
+   }
+  },
+  "viz_kpi_idle": {
+   "type": "splunk.singlevalue",
+   "title": "Idle GPU-Hours (7d)",
+   "dataSources": {
+    "primary": "ds_kpi_idle"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "#E0453A",
+    "shouldAbbreviateMajorValue": true
+   }
+  },
+  "viz_kpi_degraded": {
+   "type": "splunk.singlevalue",
+   "title": "Degraded Nodes",
+   "dataSources": {
+    "primary": "ds_kpi_degraded"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_kpi_ecc": {
+   "type": "splunk.singlevalue",
+   "title": "ECC / Xid Errors (24h)",
+   "dataSources": {
+    "primary": "ds_kpi_ecc"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 54,
+    "numberPrecision": 0,
+    "sparklineDisplay": "off",
+    "trendDisplay": "off",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "to": 10,
+      "value": "#F1813F"
+     },
+     {
+      "from": 10,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_util_by_pod": {
+   "type": "splunk.line",
+   "title": "GPU Utilization by AI POD (%)",
+   "dataSources": {
+    "primary": "ds_util_by_pod"
+   },
+   "options": {
+    "legendDisplay": "bottom",
+    "lineWidth": 2,
+    "nullValueDisplay": "connect",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "%",
+    "seriesColors": [
+     "#7B56DB",
+     "#009CEB",
+     "#00CDAF"
+    ],
+    "yAxisMin": 0,
+    "yAxisMax": 100
+   }
+  },
+  "viz_faults_over_time": {
+   "type": "splunk.column",
+   "title": "Hardware Faults by Type Over Time",
+   "dataSources": {
+    "primary": "ds_faults_over_time"
+   },
+   "options": {
+    "stackMode": "stacked",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "faults",
+    "seriesColorsByField": {
+     "ecc_dbe": "#7B56DB",
+     "xid": "#CB2196",
+     "nvlink": "#00CDAF",
+     "thermal_throttle": "#DD9900"
+    }
+   }
+  },
+  "viz_nodes_table": {
+   "type": "splunk.table",
+   "title": "Nodes Needing Attention",
+   "dataSources": {
+    "primary": "ds_nodes_table"
+   },
+   "options": {
+    "count": 25,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "fault": {
+      "rowColors": "> table | seriesByName('severity') | matchValue(sevCfg)"
+     },
+     "gpu_temp_c": {
+      "rowColors": "> table | seriesByName('gpu_temp_c') | rangeValue(tempCfg)",
+      "align": "right",
+      "width": 110
+     },
+     "fabric_link": {
+      "rowColors": "> table | seriesByName('fabric_link') | matchValue(linkCfg)"
+     },
+     "severity": {
+      "width": 90
+     }
+    }
+   },
+   "context": {
+    "sevCfg": [
+     {
+      "match": "critical",
+      "value": "#E0453A"
+     },
+     {
+      "match": "high",
+      "value": "#E0453A"
+     },
+     {
+      "match": "medium",
+      "value": "#F1813F"
+     },
+     {
+      "match": "low",
+      "value": "#F8BE34"
+     }
+    ],
+    "tempCfg": [
+     {
+      "to": 85,
+      "value": "#FFFFFF"
+     },
+     {
+      "from": 85,
+      "to": 90,
+      "value": "#F1813F"
+     },
+     {
+      "from": 90,
+      "value": "#E0453A"
+     }
+    ],
+    "linkCfg": [
+     {
+      "match": "dc1-leaf-112:Eth1/14 flapping",
+      "value": "#F1813F"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.linkToSearch",
+     "options": {
+      "search": "`ai_node_timeline(\"$row.node.value$\")`",
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$",
+      "openInNewTab": true
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 850,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_pod",
+   "input_node"
+  ],
+  "structure": [
+   {
+    "item": "viz_kpi_gpus",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_util",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_idle",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_degraded",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_kpi_ecc",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 130
+    }
+   },
+   {
+    "item": "viz_util_by_pod",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_faults_over_time",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 130,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_nodes_table",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 450,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>

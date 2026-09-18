@@ -1,0 +1,573 @@
+<dashboard version="2" theme="dark">
+<label>AI Operations Executive Overview</label>
+<description>Five scoreboards for enterprise AI: reliability, velocity, efficiency, trust and security</description>
+<definition><![CDATA[
+{
+ "title": "AI Operations Executive Overview",
+ "description": "Five scoreboards for enterprise AI: reliability, velocity, efficiency, trust and security",
+ "inputs": {
+  "input_time": {
+   "type": "input.timerange",
+   "title": "Time range",
+   "options": {
+    "token": "time",
+    "defaultValue": "-30d@d,now"
+   }
+  },
+  "input_bu": {
+   "type": "input.multiselect",
+   "title": "Business unit",
+   "options": {
+    "token": "bu",
+    "defaultValue": "*",
+    "items": [
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   },
+   "encoding": {
+    "value": "primary.business_unit",
+    "label": "primary.business_unit"
+   },
+   "dataSources": {
+    "primary": "ds_bus"
+   }
+  },
+  "input_env": {
+   "type": "input.dropdown",
+   "title": "Environment",
+   "options": {
+    "token": "env",
+    "defaultValue": "production",
+    "items": [
+     {
+      "value": "production",
+      "label": "Production"
+     },
+     {
+      "value": "lab",
+      "label": "Lab"
+     },
+     {
+      "value": "*",
+      "label": "All"
+     }
+    ]
+   }
+  }
+ },
+ "defaults": {
+  "dataSources": {
+   "ds.search": {
+    "options": {
+     "queryParameters": {
+      "earliest": "$time.earliest$",
+      "latest": "$time.latest$"
+     }
+    }
+   }
+  }
+ },
+ "dataSources": {
+  "ds_bus": {
+   "type": "ds.search",
+   "options": {
+    "query": "| inputlookup ai_application_catalog | stats count BY business_unit | fields business_unit",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Business units"
+  },
+  "ds_sb_availability": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard_latest(\"reliability\",\"Availability\")`"
+   },
+   "name": "Reliability: AI Service Availability"
+  },
+  "ds_sb_pilot": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard_latest(\"velocity\",\"Pilot to production\")`"
+   },
+   "name": "Velocity: Pilot to Production"
+  },
+  "ds_sb_gpu_util": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard_latest(\"efficiency\",\"GPU utilization\")`"
+   },
+   "name": "Efficiency: GPU Utilization"
+  },
+  "ds_sb_safety": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard_latest(\"trust\",\"Safety compliance\")`"
+   },
+   "name": "Trust: Safety Compliance"
+  },
+  "ds_sb_open_findings": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard_latest(\"security\",\"Open findings\")`"
+   },
+   "name": "Security: Open Findings"
+  },
+  "ds_incidents": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_incidents` | eval _time=strptime(coalesce(week_start,week),\"%Y-%m-%d\") | timechart span=1w sum(count) BY root_cause_layer useother=f | table _time compute network platform application model | tail 7",
+    "queryParameters": {
+     "earliest": "-9w@w",
+     "latest": "now"
+    }
+   },
+   "name": "AI Incidents by Root-Cause Layer (weekly)"
+  },
+  "ds_gpu_target": {
+   "type": "ds.search",
+   "options": {
+    "query": "`ai_scoreboard` scoreboard=efficiency metric=\"GPU utilization\" window!=\"24h\" | timechart span=1w avg(value) AS gpu_utilization | eval gpu_utilization=round(gpu_utilization,1), target=65 | tail 7",
+    "queryParameters": {
+     "earliest": "-8w@w",
+     "latest": "now"
+    }
+   },
+   "name": "GPU Utilization vs Target (%)"
+  },
+  "ds_top_risks": {
+   "type": "ds.search",
+   "options": {
+    "query": "| inputlookup ai_top_risks | search business_unit IN ($bu$) OR NOT business_unit=* | eval link=\"/app/ai_infra_monitoring/\".dashboard_id | sort 0 rank | table scoreboard signal impact owner status link",
+    "queryParameters": {
+     "earliest": "-7d@d",
+     "latest": "now"
+    }
+   },
+   "name": "Top Risks This Week"
+  }
+ },
+ "visualizations": {
+  "viz_sb_availability": {
+   "type": "splunk.singlevalue",
+   "title": "Reliability: AI Service Availability",
+   "dataSources": {
+    "primary": "ds_sb_availability"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 48,
+    "numberPrecision": 2,
+    "sparklineDisplay": "below",
+    "trendDisplay": "off",
+    "underLabel": "up 0.21 pts vs prior 30 days",
+    "underLabelFontSize": 13,
+    "sparklineValues": "> primary | seriesByName('value')",
+    "majorValue": "> sparklineValues | lastPoint()",
+    "showSparklineAreaGraph": true,
+    "sparklineStrokeColor": "#009CEB",
+    "sparklineAreaColor": "#009CEB",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 99.5,
+      "value": "#E0453A"
+     },
+     {
+      "from": 99.5,
+      "to": 99.9,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 99.9,
+      "value": "#53A051"
+     }
+    ]
+   }
+  },
+  "viz_sb_pilot": {
+   "type": "splunk.singlevalue",
+   "title": "Velocity: Pilot to Production",
+   "dataSources": {
+    "primary": "ds_sb_pilot"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 48,
+    "numberPrecision": 0,
+    "sparklineDisplay": "below",
+    "trendDisplay": "off",
+    "underLabel": "down 12 days",
+    "underLabelFontSize": 13,
+    "sparklineValues": "> primary | seriesByName('value')",
+    "majorValue": "> sparklineValues | lastPoint()",
+    "showSparklineAreaGraph": true,
+    "sparklineStrokeColor": "#009CEB",
+    "sparklineAreaColor": "#009CEB",
+    "majorColor": "#FFFFFF",
+    "unit": "d",
+    "unitPosition": "after"
+   }
+  },
+  "viz_sb_gpu_util": {
+   "type": "splunk.singlevalue",
+   "title": "Efficiency: GPU Utilization",
+   "dataSources": {
+    "primary": "ds_sb_gpu_util"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 48,
+    "numberPrecision": 1,
+    "sparklineDisplay": "below",
+    "trendDisplay": "off",
+    "underLabel": "up 7.7 pts, target 65%",
+    "underLabelFontSize": 13,
+    "sparklineValues": "> primary | seriesByName('value')",
+    "majorValue": "> sparklineValues | lastPoint()",
+    "showSparklineAreaGraph": true,
+    "sparklineStrokeColor": "#009CEB",
+    "sparklineAreaColor": "#009CEB",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 50,
+      "value": "#F1813F"
+     },
+     {
+      "from": 50,
+      "to": 65,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 65,
+      "value": "#53A051"
+     }
+    ]
+   }
+  },
+  "viz_sb_safety": {
+   "type": "splunk.singlevalue",
+   "title": "Trust: Safety Compliance",
+   "dataSources": {
+    "primary": "ds_sb_safety"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 48,
+    "numberPrecision": 1,
+    "sparklineDisplay": "below",
+    "trendDisplay": "off",
+    "underLabel": "within policy band",
+    "underLabelFontSize": 13,
+    "sparklineValues": "> primary | seriesByName('value')",
+    "majorValue": "> sparklineValues | lastPoint()",
+    "showSparklineAreaGraph": true,
+    "sparklineStrokeColor": "#009CEB",
+    "sparklineAreaColor": "#009CEB",
+    "majorColor": "> majorValue | rangeValue(colorCfg)",
+    "unit": "%",
+    "unitPosition": "after"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 99,
+      "value": "#E0453A"
+     },
+     {
+      "from": 99,
+      "value": "#53A051"
+     }
+    ]
+   }
+  },
+  "viz_sb_open_findings": {
+   "type": "splunk.singlevalue",
+   "title": "Security: Open Findings",
+   "dataSources": {
+    "primary": "ds_sb_open_findings"
+   },
+   "options": {
+    "backgroundColor": "transparent",
+    "majorFontSize": 48,
+    "numberPrecision": 0,
+    "sparklineDisplay": "below",
+    "trendDisplay": "off",
+    "underLabel": "4 high, all owned",
+    "underLabelFontSize": 13,
+    "sparklineValues": "> primary | seriesByName('value')",
+    "majorValue": "> sparklineValues | lastPoint()",
+    "showSparklineAreaGraph": true,
+    "sparklineStrokeColor": "#009CEB",
+    "sparklineAreaColor": "#009CEB",
+    "majorColor": "> majorValue | rangeValue(colorCfg)"
+   },
+   "context": {
+    "colorCfg": [
+     {
+      "to": 1,
+      "value": "#53A051"
+     },
+     {
+      "from": 1,
+      "to": 10,
+      "value": "#F8BE34"
+     },
+     {
+      "from": 10,
+      "to": 30,
+      "value": "#F1813F"
+     },
+     {
+      "from": 30,
+      "value": "#E0453A"
+     }
+    ]
+   }
+  },
+  "viz_incidents": {
+   "type": "splunk.column",
+   "title": "AI Incidents by Root-Cause Layer (weekly)",
+   "dataSources": {
+    "primary": "ds_incidents"
+   },
+   "options": {
+    "stackMode": "stacked",
+    "legendDisplay": "bottom",
+    "dataValuesDisplay": "off",
+    "xAxisTitleText": "week of",
+    "yAxisTitleText": "incidents",
+    "seriesColorsByField": {
+     "compute": "#7B56DB",
+     "network": "#009CEB",
+     "platform": "#00CDAF",
+     "application": "#DD9900",
+     "model": "#FF677B"
+    }
+   }
+  },
+  "viz_gpu_target": {
+   "type": "splunk.line",
+   "title": "GPU Utilization vs Target (%)",
+   "dataSources": {
+    "primary": "ds_gpu_target"
+   },
+   "options": {
+    "legendDisplay": "bottom",
+    "lineWidth": 2,
+    "nullValueDisplay": "connect",
+    "xAxisTitleText": "_time",
+    "yAxisTitleText": "%",
+    "seriesColorsByField": {
+     "gpu_utilization": "#009CEB",
+     "target": "#C3CBD4"
+    },
+    "yAxisMin": 40,
+    "yAxisMax": 80
+   }
+  },
+  "viz_top_risks": {
+   "type": "splunk.table",
+   "title": "Top Risks This Week",
+   "dataSources": {
+    "primary": "ds_top_risks"
+   },
+   "options": {
+    "count": 7,
+    "showRowNumbers": false,
+    "headerVisibility": "fixed",
+    "showInternalFields": false,
+    "font": "monospace",
+    "columnFormat": {
+     "scoreboard": {
+      "rowColors": "> table | seriesByName('scoreboard') | matchValue(sbCfg)",
+      "width": 110
+     },
+     "status": {
+      "rowColors": "> table | seriesByName('status') | matchValue(statusCfg)",
+      "width": 150
+     },
+     "owner": {
+      "width": 130
+     },
+     "link": {
+      "width": 30
+     }
+    }
+   },
+   "context": {
+    "sbCfg": [
+     {
+      "match": "reliability",
+      "value": "#009CEB"
+     },
+     {
+      "match": "velocity",
+      "value": "#7B56DB"
+     },
+     {
+      "match": "efficiency",
+      "value": "#DD9900"
+     },
+     {
+      "match": "trust",
+      "value": "#00CDAF"
+     },
+     {
+      "match": "security",
+      "value": "#FF677B"
+     }
+    ],
+    "statusCfg": [
+     {
+      "match": "investigating",
+      "value": "#E0453A"
+     },
+     {
+      "match": "under review",
+      "value": "#F8BE34"
+     },
+     {
+      "match": "node drained",
+      "value": "#F1813F"
+     },
+     {
+      "match": "right-sizing",
+      "value": "#F8BE34"
+     },
+     {
+      "match": "capacity rebalanced",
+      "value": "#53A051"
+     },
+     {
+      "match": "contained",
+      "value": "#53A051"
+     },
+     {
+      "match": "tool fix deployed",
+      "value": "#53A051"
+     }
+    ]
+   },
+   "eventHandlers": [
+    {
+     "type": "drilldown.customUrl",
+     "options": {
+      "url": "$row.link.value$",
+      "newTab": false
+     }
+    }
+   ]
+  }
+ },
+ "layout": {
+  "type": "grid",
+  "options": {
+   "width": 1440,
+   "height": 890,
+   "showTitleAndDescription": true
+  },
+  "globalInputs": [
+   "input_time",
+   "input_bu",
+   "input_env"
+  ],
+  "structure": [
+   {
+    "item": "viz_sb_availability",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 0,
+     "w": 288,
+     "h": 170
+    }
+   },
+   {
+    "item": "viz_sb_pilot",
+    "type": "block",
+    "position": {
+     "x": 288,
+     "y": 0,
+     "w": 288,
+     "h": 170
+    }
+   },
+   {
+    "item": "viz_sb_gpu_util",
+    "type": "block",
+    "position": {
+     "x": 576,
+     "y": 0,
+     "w": 288,
+     "h": 170
+    }
+   },
+   {
+    "item": "viz_sb_safety",
+    "type": "block",
+    "position": {
+     "x": 864,
+     "y": 0,
+     "w": 288,
+     "h": 170
+    }
+   },
+   {
+    "item": "viz_sb_open_findings",
+    "type": "block",
+    "position": {
+     "x": 1152,
+     "y": 0,
+     "w": 288,
+     "h": 170
+    }
+   },
+   {
+    "item": "viz_incidents",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 170,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_gpu_target",
+    "type": "block",
+    "position": {
+     "x": 720,
+     "y": 170,
+     "w": 720,
+     "h": 320
+    }
+   },
+   {
+    "item": "viz_top_risks",
+    "type": "block",
+    "position": {
+     "x": 0,
+     "y": 490,
+     "w": 1440,
+     "h": 400
+    }
+   }
+  ]
+ }
+}
+]]></definition>
+</dashboard>
