@@ -3,10 +3,11 @@
 
 Checks: every dashboard dataSource query returns rows with no ERROR message; the 14 headline
 KPI macros land within 5% of their targets; all 25 alerts have written an ai:alert event
-(optionally force-dispatched at the last incident's 14:55 local); scoreboard values equal
+(optionally force-dispatched at the last incident's 14:55 local, the four AI Security alerts
+at the newest incident that holds the scripted security storyline); scoreboard values equal
 the tile macros; the node timeline drilldown spans 3+ sourcetypes; the attention tables
-lead with the scripted incident rows. Prints a fixed-width PASS/FAIL table and writes
-dist/smoke.txt (and --json).
+lead with (ai_applications: list among their attention rows) the scripted incident rows.
+Prints a fixed-width PASS/FAIL table and writes dist/smoke.txt (and --json).
 """
 import argparse
 import datetime as dt
@@ -67,7 +68,6 @@ TABLE_EXPECT = {
         ("dc1-leaf-112", "Eth1/14"), ("dc1-leaf-112", "Eth1/31"), ("dc1-spine-02", "Eth2/05")]),
     "ai_platform_workloads": (("workload", "reason"), [
         ("med-advisor-v41-7c9f4", "NodeNotReady"), ("med-advisor-v41-5b21d", "OOMKilled")]),
-    "ai_applications": (("gen_ai.app",), [("medadvice-chat",)]),
     "model_performance_quality": (("suite", "status"), [("reasoning", "regression")]),
     "ai_agents": (("trace_id", "outcome"), [("c41e77a09b3d", "loop_stopped")]),
     "ai_security_posture": (("user", "src"), [
@@ -78,6 +78,33 @@ TABLE_EXPECT = {
 }
 # accept these key spellings in addition to the canonical ones (aliases the views may use)
 FIELD_ALIASES = {"gen_ai.app": ("gen_ai.app", "app"), "trace_id": ("trace_id",), "user": ("user",)}
+# view -> (key field, scripted rows). During the incident several applications write attention rows
+# every minute, so which one is newest depends on indexing order. These tables are read over the
+# 24 hours ending at the last incident's 15:00 and must list the scripted rows among their leading
+# attention rows (guardrail other than pass, or retrieval timeout).
+TABLE_CONTAINS = {
+    "ai_applications": (("gen_ai.app", "trace_id"), [
+        ("medadvice-chat", "7f3a9c1e04b2"), ("medadvice-chat", "2c6e0b77d1f5"), ("medadvice-chat", "9d02b6f1c47a")]),
+}
+
+# The generator writes the scripted security storyline (the seven findings with their raw events and
+# the 59-attempt prompt-injection campaign) only on its latest day at backfill time; streaming never
+# adds it. The AI Security alerts are dispatched at the newest incident whose day holds all four pieces
+# they detect, within the security dashboard's 7-day window; the other alerts at the last incident.
+STORYLINE_ALERT_PREFIX = "AI Security - "
+STORYLINE_DAYS = 7
+STORYLINE_SEARCH = (
+    "(index=ai_security host=ai-demo-generator sourcetype IN (\"aws:cloudtrail:sim\",\"k8s:audit:sim\") "
+    "((user=\"svc-mlops-ci\" first_seen=true object=\"weights/med-advisor-v41/\") "
+    "OR (user=\"maya.okonkwo@buttercupgames.com\" action=\"kubectl exec\" off_hours=true) "
+    "OR (user=\"svc-eval-runner\" asn_new=true bytes_out>10737418240))) "
+    "OR (index=ai_application host=ai-demo-generator sourcetype=gen_ai:guardrail category=prompt_injection "
+    "verdict=blocked src=\"203.0.113.10\") "
+    "| eval day=strftime(_time,\"%Y-%m-%d\"), hour=tonumber(strftime(_time,\"%H\")), "
+    "piece=case(sourcetype=\"gen_ai:guardrail\" AND hour>=13 AND hour<15,\"injection\", sourcetype=\"gen_ai:guardrail\",\"other\", "
+    "sourcetype=\"k8s:audit:sim\",\"credential\", like(object,\"weights/%\"),\"weights\", true(),\"egress\") "
+    "| chart count OVER day BY piece "
+    "| where weights>0 AND credential>0 AND egress>0 AND injection>=20 | sort - day | head 1 | fields day")
 
 
 # --------------------------------------------------------------------------- views
@@ -265,6 +292,12 @@ def alert_names(savedsearches_path):
     return names
 
 
+def local_now(epoch=None):
+    """Aware local datetime for `epoch`, or for the real clock when None."""
+    tz = ZoneInfo(TZ) if ZoneInfo else None
+    return dt.datetime.fromtimestamp(epoch, tz) if epoch is not None else dt.datetime.now(tz)
+
+
 def incident_anchor(now=None):
     """Epoch of the most recent completed incident's 14:55 local (today if past 15:05, else yesterday)."""
     tz = ZoneInfo(TZ) if ZoneInfo else None
@@ -278,26 +311,51 @@ def incident_anchor(now=None):
     return anchor
 
 
-def check_alerts(m, res, savedsearches_path, dispatch, saved=None):
+def storyline_anchor(m, now=None):
+    """14:55 local on the newest day, up to the last incident and within the last STORYLINE_DAYS days,
+    whose data holds the scripted security storyline (STORYLINE_SEARCH); None if there is none."""
+    now = now or local_now()
+    last = incident_anchor(now)
+    start = dt.datetime.combine(now.date() - dt.timedelta(days=STORYLINE_DAYS), dt.time(0)).replace(tzinfo=last.tzinfo)
+    end = last + dt.timedelta(minutes=5)
+    rows, _ = m.search(STORYLINE_SEARCH, int(start.timestamp()), int(end.timestamp()))
+    if not rows or not rows[0].get("day"):
+        return None
+    day = dt.date.fromisoformat(rows[0]["day"])
+    return dt.datetime.combine(day, dt.time(14, 55)).replace(tzinfo=last.tzinfo)
+
+
+def check_alerts(m, res, savedsearches_path, dispatch, saved=None, now=None):
     expected = alert_names(savedsearches_path)
     if len(expected) != 25:
         res.add("alerts", "savedsearches.conf", "25 alert stanzas", len(expected), False, "parsed from default/")
     if dispatch:
-        anchor = incident_anchor()
+        anchor = incident_anchor(now)
+        story, story_note = None, "no day in the last %d days holds the scripted security storyline" % STORYLINE_DAYS
+        if any(n.startswith(STORYLINE_ALERT_PREFIX) for n in expected):
+            try:
+                story = storyline_anchor(m, now)
+            except RestError as e:
+                story_note = "storyline search failed: HTTP %s" % e.status
         saved = saved or {}
         try:
             saved = m.saved_searches()
         except RestError as e:
             res.add("alerts", "dispatch", "saved searches listed", "HTTP %s" % e.status, False, str(e)[:80])
         for name in expected:
+            at = story if name.startswith(STORYLINE_ALERT_PREFIX) else anchor
+            if at is None:
+                res.add("dispatch", name, "results>0 @storyline", "no anchor", False, story_note)
+                continue
             content = saved.get(name, {})
             earliest = content.get("dispatch.earliest_time", "-15m@m")
             try:
-                sid = m.dispatch_saved_search(name, **{"trigger_actions": 1, "dispatch.now": int(anchor.timestamp()),
+                sid = m.dispatch_saved_search(name, **{"trigger_actions": 1, "dispatch.now": int(at.timestamp()),
                                                        "dispatch.earliest_time": earliest, "dispatch.latest_time": "now"})
                 job = m.wait_job(sid)
                 n = int(job.get("resultCount", 0))
-                res.add("dispatch", name, "results>0 @%s" % anchor.strftime("%m-%d %H:%M"), n, n > 0)
+                res.add("dispatch", name, "results>0 @%s" % at.strftime("%m-%d %H:%M"), n, n > 0,
+                        "newest incident with the security storyline" if at is story and at != anchor else "")
             except RestError as e:
                 res.add("dispatch", name, "dispatched", "HTTP %s" % e.status, False, str(e)[:80])
         time.sleep(30)
@@ -352,17 +410,55 @@ def row_key(row, fields):
     return tuple(out)
 
 
-def check_table_order(m, res, defs):
+def table_query(defn):
+    """(ds id, (query, earliest, latest)) of the view's first table; the query is None if unresolvable."""
+    ds_id = table_datasource(defn)
+    query = None
+    for d, q, e, l, missing in view_queries(defn):
+        if d == ds_id and not missing:
+            query = (q, e, l)
+    return ds_id, query
+
+
+def is_attention(row):
+    """True for a request row the table ranks as needing attention (guardrail hit or retrieval timeout)."""
+    return row.get("guardrail", "pass") not in ("pass", "") or row.get("retrieval_ms") == "timeout"
+
+
+def check_table_contains(m, res, defs, now=None):
+    end = incident_anchor(now) + dt.timedelta(minutes=5)
+    for view_id, (fields, scripted) in TABLE_CONTAINS.items():
+        defn = defs.get(view_id)
+        if not defn:
+            res.add("table_order", view_id, "view present", "absent", False, "view not loaded")
+            continue
+        ds_id, query = table_query(defn)
+        if not query:
+            res.add("table_order", view_id, "table dataSource", ds_id, False, "no resolvable table query")
+            continue
+        where = "%s/%s" % (view_id, ds_id)
+        try:
+            rows, _ = m.search(query[0], int(end.timestamp()) - 86400, int(end.timestamp()))
+        except RestError as e:
+            res.add("table_order", where, "%d scripted rows" % len(scripted), "HTTP %s" % e.status, False, str(e)[:80])
+            continue
+        # the query sorts attention rows first, so a scripted attention row in the table sits in that block
+        pos = {row_key(r, fields): n for n, r in reversed(list(enumerate(rows, 1))) if is_attention(r)}
+        found = [pos.get(k) for k in scripted]
+        missing = ["/".join(k) for k, p in zip(scripted, found) if p is None]
+        res.add("table_order", where, "%d scripted rows" % len(scripted), "%d of %d" % (len(scripted) - len(missing), len(rows)),
+                not missing, ("24h to %s: attention rows %s" % (end.strftime("%m-%d %H:%M"), ",".join(str(p) for p in found)))
+                if not missing else ("missing " + ", ".join(missing))[:200])
+
+
+def check_table_order(m, res, defs, now=None):
+    check_table_contains(m, res, defs, now)
     for view_id, (fields, expected) in TABLE_EXPECT.items():
         defn = defs.get(view_id)
         if not defn:
             res.add("table_order", view_id, "view present", "absent", False, "view not loaded")
             continue
-        ds_id = table_datasource(defn)
-        query = None
-        for d, q, e, l, missing in view_queries(defn):
-            if d == ds_id and not missing:
-                query = (q, e, l)
+        ds_id, query = table_query(defn)
         if not query:
             res.add("table_order", view_id, "table dataSource", ds_id, False, "no resolvable table query")
             continue
@@ -387,7 +483,9 @@ def main(argv=None):
     ap.add_argument("--env-file", default=".env")
     ap.add_argument("--out", default="dist/smoke.txt")
     ap.add_argument("--json", dest="json_out", help="also write results as JSON")
-    ap.add_argument("--dispatch-alerts", action="store_true", help="force-dispatch all 25 alerts at the last incident's 14:55 local")
+    ap.add_argument("--dispatch-alerts", action="store_true",
+                    help="force-dispatch all 25 alerts at the last incident's 14:55 local (AI Security: the newest incident with the storyline)")
+    ap.add_argument("--now", type=int, help="epoch that decides which incident is the last one (default: the real clock)")
     ap.add_argument("--only", help="comma-separated subset: views,kpis,alerts,scoreboard,timeline,tables")
     ap.add_argument("--run", help="run one SPL (used by make clean) and print the row count")
     ap.add_argument("--confirm", action="store_true", help="required with --run when the SPL contains | delete")
@@ -412,6 +510,7 @@ def main(argv=None):
         return 1 if errs else 0
 
     only = set(a.only.split(",")) if a.only else {"views", "kpis", "alerts", "scoreboard", "timeline", "tables"}
+    now = local_now(a.now) if a.now is not None else None
     res = Results()
     defs = {}
     if "views" in only or "tables" in only:
@@ -420,13 +519,13 @@ def main(argv=None):
     if "kpis" in only:
         check_kpis(m, res)
     if "alerts" in only:
-        check_alerts(m, res, a.savedsearches, a.dispatch_alerts)
+        check_alerts(m, res, a.savedsearches, a.dispatch_alerts, now=now)
     if "scoreboard" in only:
         check_scoreboard(m, res)
     if "timeline" in only:
         check_node_timeline(m, res)
     if "tables" in only:
-        check_table_order(m, res, defs)
+        check_table_order(m, res, defs, now=now)
 
     text = res.table()
     print(text)

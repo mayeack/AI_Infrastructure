@@ -3,9 +3,10 @@
 
 The search/jobs `now` parameter fixes both the job's relative time range and SPL's now(), so the
 dashboard, KPI, scoreboard, timeline and table checks see exactly the data window they saw at that
-moment. Use it to compare a new Splunk version with a baseline run over the same data: pin to the
-last minute that was fully indexed when the baseline ran. Refuses --dispatch-alerts and --confirm;
-writes dist/smoke_pinned.txt unless --out is given.
+moment. It also passes --now, so the incident-anchored table checks use the incident that was the last
+one at the pinned moment. Use it to compare a new Splunk version with a baseline run over the same data:
+pin to the last minute that was fully indexed when the baseline ran. Refuses --dispatch-alerts and
+--confirm; writes dist/smoke_pinned.txt unless --out is given.
 
   $SPLUNK_HOME/bin/splunk cmd python3 tools/smoke_pinned.py 1789764360 --json dist/smoke_pinned.json
 """
@@ -24,6 +25,8 @@ def main(argv):
     pin, args = int(argv[0]), argv[1:]
     if "--out" not in args:
         args += ["--out", "dist/smoke_pinned.txt"]
+    if "--now" not in args:
+        args += ["--now", str(pin)]
     post = _splunkrest.Mgmt.post
 
     def pinned_post(self, path, data=None, params=None, **kw):
