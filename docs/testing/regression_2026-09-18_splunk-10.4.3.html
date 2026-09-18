@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Regression test report: ai_infra_monitoring on Splunk Enterprise 10.4.3</title><style>
+:root{color-scheme:dark}
+body{margin:0;padding:32px 16px;background:#171D21;color:#E1E6EB;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:1080px;margin:0 auto}
+h1,h2,h3,h4{color:#FFFFFF;line-height:1.25;margin:1.6em 0 .5em}
+h1{font-size:2em;border-bottom:1px solid #3C444D;padding-bottom:.3em}
+h2{font-size:1.5em;border-bottom:1px solid #31373D;padding-bottom:.25em}
+h3{font-size:1.2em}
+a{color:#009CEB;text-decoration:none}a:hover{text-decoration:underline}
+code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:.9em;background:#2B3033;padding:.1em .35em;border-radius:3px}
+pre{background:#0F1316;border:1px solid #3C444D;border-radius:6px;padding:12px 14px;overflow-x:auto}
+pre code{background:none;padding:0;font-size:.85em}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.92em}
+th,td{border:1px solid #3C444D;padding:6px 9px;text-align:left;vertical-align:top}
+th{background:#212527;color:#FFFFFF}
+tr:nth-child(even) td{background:#1C2125}
+blockquote{border-left:4px solid #7B56DB;margin:1em 0;padding:.2em 1em;color:#B8C0C8}
+hr{border:0;border-top:1px solid #3C444D;margin:2em 0}
+ul,ol{padding-left:1.6em}
+li{margin:.2em 0}
+</style></head><body><main>
+<h1>Regression test report: ai_infra_monitoring on Splunk Enterprise 10.4.3</h1>
+<p>This is the smoke test and full regression run of <code>ai_infra_monitoring</code> 1.0.0 after the Splunk Enterprise upgrade from 10.4.0 to 10.4.3 on the demo instance, on 2026-09-18. All times are Pacific (PDT).</p>
+<h2>Summary</h2>
+<p><strong>Verdict: pass. The upgrade caused no regressions.</strong> Every static check, the package, AppInspect and the generator self-check pass with the same results as before the upgrade. Every knowledge object loads, and the 25 feeds, the scheduler, HEC and the app's alert actions all work on 10.4.3. All ten dashboards render in Splunk Web 10.4.3 without errors. On the same data window as the last pre-upgrade run, 10.4.3 reproduces the 10.4.0 result check for check (119/119).</p>
+<p>The live suite (<code>make smoke SMOKE_FLAGS=--dispatch-alerts</code>) scored <strong>139/144</strong>. None of the five failures comes from the upgrade. They are time-of-day effects in the demo data, and this was the first smoke run ever made after 15:05 (findings F2 and F3). The upgrade outage also left a 5-minute hole in today's data (F1).</p>
+<table><thead><tr><th>Suite</th><th>Command</th><th>10.4.0 baseline</th><th>10.4.3 result</th><th>Status</th></tr></thead><tbody>
+<tr><td>Static validation</td><td><code>make validate</code></td><td>OK</td><td>10/10 views OK (2 palette warnings), <code>btool check</code> OK, HTML twins fresh</td><td>Pass</td></tr>
+<tr><td>Package</td><td><code>make package</code></td><td>1.0.0 tarball</td><td>63 entries, no hidden files</td><td>Pass</td></tr>
+<tr><td>AppInspect (precert, cloud tags)</td><td><code>make appinspect</code></td><td>0 errors, 0 failures, 4 warnings, 131 successes</td><td>identical, no check changed result</td><td>Pass</td></tr>
+<tr><td>Generator self-check</td><td><code>bin/ai_demo_generator.py --self-check</code></td><td>not recorded</td><td>39/39 KPIs within tolerance on Python 3.13.11</td><td>Pass</td></tr>
+<tr><td>Live smoke with alert dispatch</td><td><code>make smoke SMOKE_FLAGS=--dispatch-alerts</code></td><td>143/144 (13:44)</td><td>139/144 (15:19)</td><td>5 failures, none from the upgrade (F2, F3)</td></tr>
+<tr><td>Same data window as the baseline</td><td><code>tools/smoke_pinned.py</code>, clock pinned to 13:46:00</td><td>119/119 (13:47)</td><td>119/119</td><td>Pass</td></tr>
+<tr><td>Alert logic, read-only replay</td><td><code>tools/replay_alerts.py</code> at 2026-09-17 14:55</td><td>25/25 fired (13:44)</td><td>25/25 return results</td><td>Pass</td></tr>
+<tr><td>Post-upgrade platform checks</td><td>REST and SPL, section 3.5</td><td>n/a</td><td>all pass; scheduler-delay health was already red before the upgrade (F4)</td><td>Pass</td></tr>
+<tr><td>Dashboards in Splunk Web</td><td>the ten views in a browser, section 3.6</td><td>n/a</td><td>all ten render; 103 dashboard searches, 0 failed, all returned rows</td><td>Pass</td></tr>
+<tr><td>Enterprise Security risk and notable actions</td><td>forced rule dispatch</td><td>verified at 09:37</td><td>not run: the rules are suppressed until about 09:35 on 2026-09-19 (F5)</td><td>Not run</td></tr>
+</tbody></table>
+<h2>1. Test environment</h2>
+<table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody>
+<tr><td>Instance</td><td>Splunk Enterprise single instance on macOS arm64 at <code>/opt/splunk104</code>; management port 8090, Splunk Web 8002, HEC 8088</td></tr>
+<tr><td>Upgrade</td><td>10.4.0 (build <code>f798d4d49089</code>) to 10.4.3 (build <code>4174a2deda5d</code>)</td></tr>
+<tr><td>Upgrade timeline</td><td>splunkd stopped 13:56:26; migration ran 14:00:58 and all upgrade prechecks passed (KV store 8.0.20); splunkd started 14:01:26</td></tr>
+<tr><td>Bundled Python</td><td>3.13.11</td></tr>
+<tr><td>App under test</td><td><code>ai_infra_monitoring</code> 1.0.0, commit <code>4481b4f</code> on <code>main</code>, same as <code>origin/main</code>, working tree clean while the tests ran</td></tr>
+<tr><td>Instance state</td><td>all 25 generator feeds enabled (<code>local/inputs.conf</code>); the four Enterprise Security rules enabled (<code>local/savedsearches.conf</code>); Enterprise Security 8.5.1 installed; seed 20260916</td></tr>
+<tr><td>Baseline</td><td>the same day on 10.4.0: <code>make smoke</code> 119/119 at 13:47, <code>make smoke SMOKE_FLAGS=--dispatch-alerts</code> 143/144 at 13:44, AppInspect at 13:47</td></tr>
+<tr><td>Run</td><td>15:16 to 15:31 (suites), 15:36 to 15:48 (dashboards), by a Claude Code session for Michael Yeack</td></tr>
+</tbody></table>
+<h2>2. What ran</h2>
+<ol>
+<li><code>make all</code>: <code>tools/validate_views.py</code>, <code>splunk btool check</code>, the HTML-twin freshness check, <code>make package</code>, then <code>splunk-appinspect</code> 4.2.0 (<code>--mode precert --included-tags cloud</code>) with the gate script.</li>
+<li><code>splunk cmd python3 bin/ai_demo_generator.py --self-check --seed 20260916</code>, the offline recomputation of 39 dashboard KPIs.</li>
+<li><code>make smoke SMOKE_FLAGS=--dispatch-alerts</code>: every dashboard query, the 14 headline KPIs, alert coverage, the 25 alerts force-dispatched at the last incident's 14:55, scoreboards, the node timeline and the attention-table ordering.</li>
+<li>Read-only post-upgrade platform checks over REST and SPL (section 3.5).</li>
+<li>Triage of the failures:</li>
+<ul>
+<li><code>tools/replay_alerts.py</code> ran the 25 alert searches at 2026-09-17 14:55 and 2026-09-18 14:55, with the <code>collect</code> stages removed and no actions.</li>
+<li><code>tools/smoke_pinned.py</code> reran <code>smoke.py</code> unchanged with every search pinned to 13:47:00 and then 13:46:00. That repeats the baseline's data window on 10.4.3.</li>
+</ul>
+<li>After you logged in to Splunk Web: the ten dashboards were opened in a browser at 1600×1000 (section 3.6). Each page got a screenshot review and a DOM check for error states, undrawn charts and empty panels. The <code>_audit</code> index then gave the outcome of every search job those page loads started.</li>
+</ol>
+<p>What the run wrote: step 3 dispatched the 25 alerts with <code>trigger_actions=1</code>, so the 21 alerts that returned results wrote their usual <code>ai:alert</code> events to <code>ai_summary</code>, the same action the scheduler runs every 5 minutes. The four security alerts had no results, so nothing was collected into <code>ai_security</code>. Every other step was read-only. There was no restart, backfill or <code>make clean</code>.</p>
+<p>Raw evidence lives in <code>dist/regression/2026-09-18_splunk-10.4.3/</code>, which is git-ignored and exists only on the demo instance:</p>
+<table><thead><tr><th>File</th><th>Content</th></tr></thead><tbody>
+<tr><td><code>baseline_pre_upgrade/</code></td><td>10.4.0 results: <code>smoke.txt</code>/<code>smoke.json</code> (13:47), <code>smoke_run13.log</code>, <code>smoke_run14.log</code>, <code>appinspect_pre_upgrade.json</code></td></tr>
+<tr><td><code>01_make_all.log</code>, <code>01_appinspect.json</code></td><td>step 1</td></tr>
+<tr><td><code>02_generator_selfcheck.log</code></td><td>step 2</td></tr>
+<tr><td><code>03_smoke_dispatch.log</code>, <code>.txt</code>, <code>.json</code></td><td>step 3</td></tr>
+<tr><td><code>04_alert_replay.*</code>, <code>08_replay_alerts_tool.*</code></td><td>alert replays (ad hoc script, then <code>tools/replay_alerts.py</code>)</td></tr>
+<tr><td><code>05_smoke_pinned_1347.*</code>, <code>06_smoke_pinned_1346.*</code>, <code>09_smoke_pinned_tool_1346.*</code></td><td>pinned-clock reruns</td></tr>
+<tr><td><code>07_platform_checks.log</code></td><td>step 4, with the exact SPL of every check</td></tr>
+<tr><td><code>10_final_make_all.log</code>, <code>10_appinspect.json</code></td><td><code>make all</code> after these documentation changes</td></tr>
+<tr><td><code>11_dashboard_jobs_audit.log</code></td><td>step 6: outcome of every dashboard search job, from <code>_audit</code></td></tr>
+<tr><td><code>12_dashboard_ui_check.log</code></td><td>step 6: per-dashboard DOM check results and the secondary-tile comparison</td></tr>
+</tbody></table>
+<h2>3. Results</h2>
+<h3>3.1 Static suite</h3>
+<ul>
+<li><code>validate_views</code>: all ten views OK, 0 errors. Two warnings for colours outside the palette: <code>#C3CBD4</code> in <code>ai_operations_executive_overview</code> and <code>#31373E</code> in <code>ai_stack_overview</code>. The check is static and the view files have not changed since 13:45, so the warnings predate the upgrade.</li>
+<li><code>splunk btool check</code> on 10.4.3 reports no invalid keys or stanzas in the app.</li>
+<li>The four HTML twins were regenerated with byte-identical content (<code>git status</code> stayed clean).</li>
+<li>Package <code>dist/ai_infra_monitoring-1.0.0.tgz</code> has 63 entries and no hidden files.</li>
+<li>AppInspect on 10.4.3 reports 0 errors, 0 failures, 4 warnings, 131 successes, 106 not applicable and 1 skipped. That matches the 13:47 pre-upgrade report exactly, and no check changed result. The four warnings are unchanged: Python files present, scripted inputs present, <code>threading.Thread.start</code> in a loop in <code>bin/ai_demo_lib/transport.py</code>, and the documentation IP 203.0.113.10 in <code>README.html</code>.</li>
+</ul>
+<h3>3.2 Generator self-check</h3>
+<p>All 39 KPIs pass (latest day 2026-09-18), 15 of them headline KPIs, running on the Python 3.13.11 that ships with 10.4.3. The tuner re-solved <code>ttft_sigma</code> to 0.307 against the stored 0.3. That is informational: the resulting p95 TTFT of 819 ms is within tolerance of 820 ms.</p>
+<h3>3.3 Live smoke suite</h3>
+<p>Ran 15:16 to 15:19 with alerts anchored at 2026-09-18 14:55.</p>
+<table><thead><tr><th>Check</th><th>What it proves</th><th>Pass</th><th>Fail</th></tr></thead><tbody>
+<tr><td>datasource</td><td>every dataSource query of the ten dashboards returns rows with no ERROR message</td><td>91</td><td>0</td></tr>
+<tr><td>kpi</td><td>the 14 headline KPI macros land within tolerance of their targets</td><td>14</td><td>0</td></tr>
+<tr><td>alerts</td><td>all 25 alert names have written <code>ai:alert</code> events in the last 30 days</td><td>1</td><td>0</td></tr>
+<tr><td>dispatch</td><td>each alert returns results when force-dispatched at the last incident's 14:55</td><td>21</td><td>4</td></tr>
+<tr><td>scoreboard</td><td>the five scoreboard rollups equal their tiles</td><td>5</td><td>0</td></tr>
+<tr><td>node_timeline</td><td>the <code>dc1-ucs-gpu-07</code> drilldown spans at least 3 sourcetypes (6 found)</td><td>1</td><td>0</td></tr>
+<tr><td>table_order</td><td>the seven attention tables lead with the scripted incident rows</td><td>6</td><td>1</td></tr>
+<tr><td><strong>Total</strong></td><td></td><td><strong>139</strong></td><td><strong>5</strong></td></tr>
+</tbody></table>
+<p>The failures are the four AI Security alerts (0 results at 2026-09-18 14:55, finding F2) and the <code>ai_applications</code> request table leading with <code>search-rag</code> instead of <code>medadvice-chat</code> (finding F3).</p>
+<p>The KPI values on 10.4.3 match 10.4.0. The last two columns are the pinned rerun on the baseline's data window and the live run.</p>
+<table><thead><tr><th>KPI</th><th>Target</th><th>Tolerance</th><th>10.4.0 at 13:47</th><th>10.4.3 pinned 13:46</th><th>10.4.3 live 15:19</th></tr></thead><tbody>
+<tr><td>GPUs Monitored</td><td>512</td><td>5%</td><td>512</td><td>512</td><td>512</td></tr>
+<tr><td>Avg GPU Utilization</td><td>61.8</td><td>5%</td><td>61.6</td><td>61.7</td><td>61.6</td></tr>
+<tr><td>Idle GPU-Hours (7d)</td><td>17,100</td><td>5%</td><td>17,136</td><td>17,136</td><td>17,136</td></tr>
+<tr><td>Fabric Links Monitored</td><td>1,152</td><td>5%</td><td>1,152</td><td>1,152</td><td>1,152</td></tr>
+<tr><td>Pod Restarts (24h)</td><td>37</td><td>5%</td><td>37</td><td>37</td><td>37</td></tr>
+<tr><td>Requests (24h)</td><td>1,280,000</td><td>5%</td><td>1,276,225</td><td>1,278,331</td><td>1,269,477</td></tr>
+<tr><td>Availability</td><td>99.93</td><td>0.05</td><td>99.93</td><td>99.93</td><td>99.93</td></tr>
+<tr><td>p95 Time-to-First-Token</td><td>820</td><td>5%</td><td>804</td><td>805</td><td>802</td></tr>
+<tr><td>Safety Compliance</td><td>99.2</td><td>0.05</td><td>99.2</td><td>99.2</td><td>99.2</td></tr>
+<tr><td>Hallucination Rate</td><td>1.8</td><td>5%</td><td>1.8</td><td>1.8</td><td>1.8</td></tr>
+<tr><td>Agent Runs (24h)</td><td>48,320</td><td>5%</td><td>48,163</td><td>48,258</td><td>47,913</td></tr>
+<tr><td>GPU-Hours Allocated (7d)</td><td>68,900</td><td>5%</td><td>69,232</td><td>69,232</td><td>69,232</td></tr>
+<tr><td>Open Findings</td><td>22</td><td>5%</td><td>22</td><td>22</td><td>22</td></tr>
+<tr><td>Prompt Injections Detected</td><td>214</td><td>5%</td><td>214</td><td>214</td><td>214</td></tr>
+</tbody></table>
+<p>All five scoreboards equal their tiles in every run: Availability 99.93, Pilot to production 38, GPU utilization 61.6, Safety compliance 99.2 and Open findings 22. The live Requests and Agent Runs totals are 0.5 to 0.7% below the baseline and pinned runs because the live 24-hour window contains the upgrade outage (F1).</p>
+<p>Alert results by run. The first column is the live forced dispatch. The next two are the read-only replay at two anchors. The last is the first <code>ai:alert</code> event the scheduler wrote after the upgrade, before any forced dispatch.</p>
+<table><thead><tr><th>Alert</th><th>Dispatch at 09-18 14:55</th><th>Replay at 09-18 14:55</th><th>Replay at 09-17 14:55</th><th>Scheduler fired after upgrade</th></tr></thead><tbody>
+<tr><td>AI Infra - ECC or Xid faults on a GPU node</td><td>1</td><td>1</td><td>1</td><td>14:55:10</td></tr>
+<tr><td>AI Infra - Thermal throttling sustained 15 min</td><td>1</td><td>1</td><td>1</td><td>14:45:18</td></tr>
+<tr><td>AI Infra - Idle GPU capacity above 30% for 24h</td><td>1</td><td>1</td><td>1</td><td>14:03:18</td></tr>
+<tr><td>AI Network - Fabric congestion (ECN/PFC) on an AI POD link</td><td>3</td><td>3</td><td>3</td><td>14:03:13</td></tr>
+<tr><td>AI Network - Link flapping on a GPU-facing port</td><td>1</td><td>1</td><td>1</td><td>14:55:09</td></tr>
+<tr><td>AI Network - Configuration drift on an AI fabric switch</td><td>1</td><td>1</td><td>1</td><td>14:15:13</td></tr>
+<tr><td>AI Platform - Restart storm on an inference deployment</td><td>1</td><td>1</td><td>1</td><td>14:55:08</td></tr>
+<tr><td>AI Platform - Inference queue build-up</td><td>1</td><td>1</td><td>1</td><td>14:03:12</td></tr>
+<tr><td>AI Platform - Evaluation or fine-tuning job failed</td><td>3</td><td>3</td><td>3</td><td>14:03:19</td></tr>
+<tr><td>AI Apps - p95 time-to-first-token regression</td><td>1</td><td>1</td><td>1</td><td>14:15:15</td></tr>
+<tr><td>AI Apps - Error rate spike</td><td>4</td><td>4</td><td>4</td><td>14:03:13</td></tr>
+<tr><td>AI Apps - Retrieval timeouts</td><td>1</td><td>1</td><td>1</td><td>14:50:13</td></tr>
+<tr><td>AI Models - Quality drift vs baseline</td><td>1</td><td>1</td><td>1</td><td>14:03:18</td></tr>
+<tr><td>AI Models - Safety compliance below policy band</td><td>1</td><td>1</td><td>1</td><td>14:03:15</td></tr>
+<tr><td>AI Models - Evaluation regression on a release candidate</td><td>1</td><td>1</td><td>1</td><td>14:03:13</td></tr>
+<tr><td>AI Agents - Task completion drop</td><td>1</td><td>1</td><td>1</td><td>14:03:15</td></tr>
+<tr><td>AI Agents - Runaway loop detected</td><td>2</td><td>2</td><td>2</td><td>14:03:18</td></tr>
+<tr><td>AI Agents - Guardrail surge</td><td>2</td><td>2</td><td>3</td><td>14:03:18</td></tr>
+<tr><td>AI Cost - Daily spend spike by business unit</td><td>1</td><td>1</td><td>1</td><td>14:03:19</td></tr>
+<tr><td>AI Cost - Idle reservation above threshold</td><td>4</td><td>4</td><td>4</td><td>14:03:19</td></tr>
+<tr><td>AI Cost - Runaway agent token spend</td><td>2</td><td>2</td><td>2</td><td>14:03:15</td></tr>
+<tr><td>AI Security - First-seen access to model weights</td><td><strong>0</strong></td><td>0</td><td>1</td><td>none (0 results in 15 runs)</td></tr>
+<tr><td>AI Security - Credential misuse on an AI cluster</td><td><strong>0</strong></td><td>0</td><td>1</td><td>none (0 results in 15 runs)</td></tr>
+<tr><td>AI Security - Anomalous data movement from an AI data store</td><td><strong>0</strong></td><td>0</td><td>1</td><td>none (0 results in 15 runs)</td></tr>
+<tr><td>AI Security - Prompt-injection campaign from a single source</td><td><strong>0</strong></td><td>0</td><td>1</td><td>none (0 results in 15 runs)</td></tr>
+</tbody></table>
+<h3>3.4 Same data window as the baseline</h3>
+<p><code>tools/smoke_pinned.py</code> runs <code>smoke.py</code> unchanged but sets the search-job <code>now</code> parameter. That parameter fixes both the relative time range and SPL's <code>now()</code>; a check with <code>| makeresults | eval now()</code> confirmed both. The dispatch checks are left out, so the run is read-only.</p>
+<ul>
+<li>Pinned to <strong>13:46:00</strong>, the last minute that was fully indexed when the 10.4.0 baseline ran its table checks, 10.4.3 scores <strong>119/119</strong>, the same as the baseline.</li>
+<li>Pinned to <strong>13:47:00</strong>, it scores 118/119. Only <code>ai_applications/ds_requests_table</code> differs, because this window contains the 13:46 minute: it was indexed at 13:47:42, after the baseline's table check (F3).</li>
+<li>Across the 119 checks the runs share, the live run differs from the baseline only in that same table check.</li>
+</ul>
+<h3>3.5 Post-upgrade platform checks</h3>
+<table><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody>
+<tr><td>Server</td><td>10.4.3, build <code>4174a2deda5d</code>, KV store ready; REST authentication with the <code>.env</code> credentials works</td></tr>
+<tr><td>App</td><td>enabled, visible, version 1.0.0</td></tr>
+<tr><td>Views</td><td>10 of 10 loaded, all Dashboard Studio <code>version=&quot;2&quot;</code></td></tr>
+<tr><td>Saved searches</td><td>34 of 34 loaded, all scheduled, none disabled (25 alerts, 5 scoreboards, 4 ES rules)</td></tr>
+<tr><td>Other knowledge objects</td><td>macros 74/74, event types 6/6, props stanzas 27/27, lookup files 5/5, lookup definitions 5</td></tr>
+<tr><td>Scripted inputs</td><td>25 of 25 enabled and running under Python 3.13.11</td></tr>
+<tr><td>Indexes</td><td>all nine present and enabled (<code>ai_infra_metrics</code> is a metrics index), all receiving data</td></tr>
+<tr><td>HEC</td><td><code>/services/collector/health</code> answers "HEC is healthy"; token <code>ai_infra_demo</code> enabled and scoped to the nine indexes</td></tr>
+<tr><td>Feed freshness</td><td>every event feed and all 9 GPU metrics current. The high-rate feeds lag 1 to 2 minutes because the generator emits the previous minute. Sparse feeds (<code>cisco:ucs:alarm</code>, <code>ai:eval:run</code>, <code>cisco:nexus:config</code>) and the 5-minute interface counters outside the incident window follow their normal cadence.</td></tr>
+<tr><td>Scheduler, first hour after the upgrade (14:01 to 15:01)</td><td>366 successful runs of the app's 34 searches, 0 skipped, 0 failed, average dispatch delay 31.7 s. The hour before the upgrade: 336 successful, 0 skipped.</td></tr>
+<tr><td>Alert actions</td><td>21 of 25 alerts wrote <code>ai:alert</code> events through <code>logevent</code> from 14:03 on, including the incident alerts at 14:55. The other four had no results (F2).</td></tr>
+<tr><td>Scoreboards</td><td>all five rollups written every 15 minutes since the upgrade (last at 15:15)</td></tr>
+<tr><td>Enterprise Security</td><td>ES 8.5.1 enabled. The four rules are enabled and scheduled, and ran after the upgrade with 0 results for the same reason as F2. Their risk and notable actions have not run on 10.4.3 (F5).</td></tr>
+<tr><td>Alert action framework</td><td><code>logevent</code> ran 932 times between the upgrade and 15:45, all with exit code 0</td></tr>
+<tr><td>splunkd.log</td><td>no WARN, ERROR or FATAL lines mention the app or the generator since 14:01:26</td></tr>
+<tr><td>splunkd health</td><td>red on "Search Scheduler: Searches Delayed" (F4)</td></tr>
+</tbody></table>
+<h3>3.6 Dashboards in Splunk Web</h3>
+<p>Each dashboard was opened on 10.4.3 and left until every panel had finished loading, then checked in two ways: a screenshot review, and a DOM check of every Dashboard Studio panel for error states (search errors, "no results", waiting for input, timeouts), undrawn charts and empty tables. The <code>_audit</code> index recorded every search job these page loads started.</p>
+<table><thead><tr><th>Dashboard</th><th>Panels (data)</th><th>Charts drawn</th><th>Table rows</th><th>Error states</th><th>Searches (failed)</th><th>Values shown</th></tr></thead><tbody>
+<tr><td><code>ai_stack_overview</code></td><td>25 (11)</td><td>n/a</td><td>n/a</td><td>0</td><td>18 (0), loaded twice</td><td>1.62M, 211, 292.86K, 39.61K, 1.89M, 5.78K; scoreboards 99.93, 38, 61.6, 99.2, 22</td></tr>
+<tr><td><code>ai_infrastructure_health</code></td><td>8 (8)</td><td>2/2</td><td>25</td><td>0</td><td>9 (0)</td><td>512, 61.6%, 17.14K, 3, 41</td></tr>
+<tr><td><code>ai_network_fabric</code></td><td>8 (8)</td><td>2/2</td><td>25</td><td>0</td><td>9 (0)</td><td>1,152, 13, 38K, 9, 183 ms</td></tr>
+<tr><td><code>ai_platform_workloads</code></td><td>8 (8)</td><td>2/2</td><td>25</td><td>0</td><td>9 (0)</td><td>184, 37, 12, 1.8 s, 10</td></tr>
+<tr><td><code>ai_applications</code></td><td>8 (8)</td><td>2/2</td><td>50</td><td>0</td><td>11 (0)</td><td>1.27M, 99.93%, 798 ms, $30.2K, 1,856</td></tr>
+<tr><td><code>model_performance_quality</code></td><td>8 (8)</td><td>2/2</td><td>7</td><td>0</td><td>10 (0)</td><td>99.2%, 96.1%, 1.8%, -2.1 pts, 4.2 h</td></tr>
+<tr><td><code>ai_agents</code></td><td>8 (8)</td><td>2/2</td><td>50</td><td>0</td><td>10 (0)</td><td>47,934, 93.8%, 6.4, 1,189, 36</td></tr>
+<tr><td><code>ai_security_posture</code></td><td>8 (8)</td><td>2/2</td><td>25</td><td>0</td><td>9 (0)</td><td>22, 7, 3, 12, 214</td></tr>
+<tr><td><code>ai_cost_unit_economics</code></td><td>8 (8)</td><td>2/2</td><td>7</td><td>0</td><td>9 (0)</td><td>69.23K, 17.14K, $0.84, $212.1K, 2,140</td></tr>
+<tr><td><code>ai_operations_executive_overview</code></td><td>8 (8)</td><td>2/2</td><td>7</td><td>0</td><td>9 (0)</td><td>99.93%, 38 d, 61.6%, 99.2%, 22</td></tr>
+</tbody></table>
+<p>All 103 dashboard searches returned rows and none failed; the slowest took 1.38 s. The only HTTP errors on any page were three 404s from Splunk Web's own probes (SPL2 orchestrator, SCS tenant info, <code>splunk-visual-exporter</code>), none from the app. The headline values match the smoke run.</p>
+<p>A few tiles that the smoke test doesn't cover read slightly off the generator model: Congested Links 13 (model 14), Failed Jobs 10 (9), Guardrails Triggered 1,856 (1,906). The same searches pinned to the baseline window (13:46:00) return 14, 9 and 1,892 on 10.4.3, so the live difference comes from the F1 gap and from data written after 13:46, not from the platform.</p>
+<h2>4. Findings</h2>
+<h3>F1. Five-minute data gap from the upgrade outage</h3>
+<ul>
+<li><strong>What:</strong> splunkd was down from 13:56:26 to 14:01:26. The scripted inputs only ever emit the previous minute, so minutes 13:56 to 14:00 are missing from all 25 feeds and the 9 GPU metrics. Before and after the gap the five busiest feeds carry about 1,260 events a minute and the metrics 3,264 points a minute; during it, nothing.</li>
+<li><strong>Impact:</strong> low. The gap sits inside today's incident window, so the incident charts show a 5-minute hole. The live "Last 24 hours" totals read 0.5 to 0.7% lower than on the baseline and pinned windows (Requests 1,269,477 and Agent Runs 47,913 are within 1% of target), and every tile stays within tolerance.</li>
+<li><strong>Action:</strong> none needed. The gap leaves "Last 24 hours" at 14:01 on 2026-09-19. <code>make backfill</code> cannot fill it: <code>--resume</code> skips any 5-minute bucket that already holds data, and the 13:55 and 14:00 buckets do. Plan future upgrades outside 12:45 to 15:00, the daily incident window.</li>
+</ul>
+<h3>F2. The security alerts fail dispatch after 15:05 (existed before the upgrade)</h3>
+<ul>
+<li><strong>What:</strong> the four AI Security alerts return 0 results when dispatched at 2026-09-18 14:55.</li>
+<li><strong>Cause:</strong> the generator writes the scripted security storyline only on its "latest day". That storyline is the seven findings (first-seen access to model weights, off-hours <code>kubectl exec</code>, egress to a new ASN, and the prompt-injection campaign with 59 blocked attempts). <code>latest_day_for()</code> in <code>bin/ai_demo_generator.py</code> returns yesterday until 15:00, and <code>DaySchedule</code> in <code>bin/ai_demo_lib/schedule.py</code> emits <code>FINDINGS</code> only when <code>offset == 0</code>. The streaming inputs therefore never write today's copy, and after 15:00 it is too late to stream it. Meanwhile <code>incident_anchor()</code> in <code>tools/smoke.py</code> switches to today's 14:55 at 15:05. Every earlier smoke run happened before 14:00, so this run is the first to hit the combination. The code involved has not changed since before the upgrade.</li>
+<li><strong>Evidence:</strong></li>
+<ul>
+<li>The storyline rows exist on 2026-09-17 (users svc-mlops-ci, maya.okonkwo@buttercupgames.com and svc-eval-runner) and not on 2026-09-18.</li>
+<li>The top blocked-injection source reached 59 attempts on 2026-09-17 and 30 on 2026-09-18, spread over the day, so no 90-minute window reaches the alert's threshold of 20.</li>
+<li>The read-only replay on 10.4.3 returns results for all 25 alerts at 2026-09-17 14:55 and for 21 at 2026-09-18 14:55, missing exactly these four.</li>
+</ul>
+<li><strong>Impact:</strong> limited to tests and demos; the alert logic works on 10.4.3. From 2026-09-19 the anchor day never carries the storyline, so the four dispatch checks keep failing and the security story ages out of "Last 24 hours".</li>
+<li><strong>Action:</strong> follow-up 1 in section 5.</li>
+</ul>
+<h3>F3. The <code>ai_applications</code> table-order check depends on timing (existed before the upgrade)</h3>
+<ul>
+<li><strong>What:</strong> <code>ai_applications/ds_requests_table</code> should start with <code>medadvice-chat</code>; the live run started with <code>search-rag</code>.</li>
+<li><strong>Cause:</strong> the table puts attention rows first (guardrail not <code>pass</code>, retrieval timeout, or status not <code>ok</code>), newest first. During the incident, <code>medadvice-chat</code>, <code>search-rag</code>, <code>claims-agent</code> and <code>code-assist</code> all produce attention rows every minute. Of the 20 newest before 13:47, nine were <code>medadvice-chat</code>, five <code>search-rag</code>, four <code>claims-agent</code> and two <code>code-assist</code>. So the first row depends on which app's row arrived last. The 13:46 minute, whose newest attention row is <code>search-rag</code> at 13:46:54.917, was indexed at 13:47:42. The 10.4.0 baseline run finished at 13:47:43 with the table checks last, so it read the table before that minute arrived. At that point the newest attention row was <code>medadvice-chat</code> at 13:45:43.904.</li>
+<li><strong>Evidence:</strong> on 10.4.3 the check passes with the clock pinned to 13:46:00 and fails pinned to 13:47:00, exactly as the data predicts. After the incident ends at 15:00, the newest attention rows are ordinary background rows from any app.</li>
+<li><strong>Action:</strong> follow-up 1 in section 5.</li>
+</ul>
+<h3>F4. splunkd health is red on "Searches Delayed" (existed before the upgrade, affects the whole instance)</h3>
+<ul>
+<li>The indicator has been red since at least 2026-09-15 15:55: 3,600 red reports before the upgrade, and green only briefly after restarts. It measured 964% against a threshold of 20% for non-high-priority scheduled searches over 24 hours.</li>
+<li>The instance also runs Enterprise Security 8.5.1, MLTK and about 150 scheduled searches. This app's searches still meet their schedules on 10.4.3: 0 skipped, 31.7 s average delay.</li>
+<li><strong>Action:</strong> none for the app. Tune scheduler concurrency on the instance or disable unused scheduled content if the red status matters.</li>
+</ul>
+<h3>F5. Enterprise Security risk and notable actions not exercised on 10.4.3</h3>
+<ul>
+<li><strong>What:</strong> no ES rule has returned results since the upgrade (F2), so <code>action.risk</code> and <code>action.notable</code> have not run on 10.4.3. No risk or notable event from any source has been indexed since 14:01:26.</li>
+<li><strong>Why a forced dispatch wouldn't help today:</strong> all four rules carry <code>alert.suppress = 1</code> on <code>user,object</code> for 86,300 s. The pre-upgrade verification at 09:37 set that suppression, and at 15:45 it had 64,194 s left (until about 09:35 on 2026-09-19). A dispatch at the 2026-09-17 14:55 anchor would return the same user and object and be suppressed.</li>
+<li><strong>What is known:</strong> the rule searches run on schedule on 10.4.3 without errors, the app's <code>logevent</code> action ran 932 times with exit code 0, and both ES actions produced one risk event and one notable per rule on 10.4.0 this morning.</li>
+<li><strong>Action:</strong> follow-up 2 in section 5.</li>
+</ul>
+<h2>5. Follow-ups</h2>
+<ol>
+<li><strong>Make the smoke test independent of the time of day (F2, F3).</strong> Option one: have the generator write the latest day's scripted rows (security <code>FINDINGS</code>, the deck request rows and the 59 blocked injections) when <code>latest_day</code> rolls over at 15:00. Option two: anchor <code>incident_anchor()</code> on the newest day that actually holds the storyline. Then change the <code>ai_applications</code> table check to require the scripted incident rows among the attention rows, rather than one exact newest row.</li>
+<li><strong>Exercise the Enterprise Security actions on 10.4.3 (F5).</strong> After about 09:35 on 2026-09-19, when the suppression expires (or sooner, after clearing it), dispatch one rule at 2026-09-17 14:55 with <code>trigger_actions=1</code> and check <code>index=risk</code> and <code>index=notable</code> with a window that covers 2026-09-17. This adds one duplicate risk event and one duplicate notable to the demo's ES queue.</li>
+</ol>
+<h2>6. Rerunning the suite</h2>
+<p>From the app directory, with <code>.env</code> holding working credentials:</p>
+<pre><code class="lang-bash">make all
+$SPLUNK_HOME/bin/splunk cmd python3 bin/ai_demo_generator.py --self-check --seed 20260916
+make smoke SMOKE_FLAGS=--dispatch-alerts</code></pre>
+<p>To compare against a baseline over the same data, pin the clock to the last minute that was fully indexed when the baseline ran, and replay the alerts at a day that holds the scripted storyline:</p>
+<pre><code class="lang-bash">$SPLUNK_HOME/bin/splunk cmd python3 tools/smoke_pinned.py 1789764360 --json dist/smoke_pinned.json
+$SPLUNK_HOME/bin/splunk cmd python3 tools/replay_alerts.py 2026-09-17T14:55 2026-09-18T14:55</code></pre>
+<p>The platform checks in section 3.5 are REST calls and SPL searches; <code>07_platform_checks.log</code> in the evidence folder records each query with its time range.</p>
+</main></body></html>

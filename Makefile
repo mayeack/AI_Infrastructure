@@ -18,7 +18,7 @@ BACKFILL_FLAGS  ?= --resume   # gap-fill by default; use BACKFILL_FLAGS=--force 
 SMOKE_FLAGS     ?=
 INDEXES := ai_infra_metrics,ai_infra,ai_network,ai_platform,ai_application,ai_model_eval,ai_cost,ai_security,ai_summary
 TGZ     := dist/$(APP)-$(VERSION).tgz
-MD_DOCS := README.md CHANGELOG.md docs/field_reference.md bin/hec_setup.md
+MD_DOCS := README.md CHANGELOG.md docs/field_reference.md bin/hec_setup.md $(wildcard docs/testing/*.md)
 -include .env
 export
 
@@ -31,7 +31,7 @@ package: html
 	rm -rf dist/$(APP)
 	mkdir -p dist/$(APP)
 	rsync -a --exclude='.*' --exclude='__pycache__' --exclude='*.pyc' \
-	  --exclude='Makefile' --exclude='tools/' --exclude='dist/' --exclude='local/' \
+	  --exclude='Makefile' --exclude='tools/' --exclude='dist/' --exclude='local/' --exclude='docs/testing/' \
 	  --exclude='metadata/local.meta' --exclude='.env*' ./ dist/$(APP)/
 	find dist/$(APP) -type d -exec chmod 755 {} +
 	find dist/$(APP) -type f -exec chmod 644 {} +
