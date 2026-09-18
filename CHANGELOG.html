@@ -32,6 +32,13 @@ li{margin:.2em 0}
 <h3>Changed</h3>
 <ul>
 <li><code>make package</code> leaves <code>docs/testing/</code> out of the package, and <code>make html</code> and <code>make validate</code> cover its Markdown files.</li>
+<li><code>tools/smoke_pinned.py</code> passes its pin to <code>smoke.py --now</code>, so a pinned run anchors on the incident that was the last one at that moment.</li>
+</ul>
+<h3>Fixed</h3>
+<ul>
+<li><code>make smoke SMOKE_FLAGS=--dispatch-alerts</code> no longer fails the four AI Security dispatch checks when it runs after 15:05. The scripted security storyline only exists on the day the backfill wrote as its latest day, so those alerts are now dispatched at 14:55 on the newest day, up to the last incident and within 7 days, whose data holds all four pieces they detect. The other 21 alerts still fire at the last incident (regression report 2026-09-18, F2).</li>
+<li>The <code>ai_applications</code> table check no longer depends on which application's attention row was indexed last. It reads the table over the 24 hours ending at the last incident's 15:00 and requires the three scripted <code>medadvice-chat</code> rows (<code>7f3a9c1e04b2</code>, <code>2c6e0b77d1f5</code>, <code>9d02b6f1c47a</code>) among its attention rows (F3).</li>
+<li><code>smoke.py --now &lt;epoch&gt;</code> sets the clock that decides which incident is the last one.</li>
 </ul>
 <h2>[1.0.0] - 2026-09-18</h2>
 <h3>Added</h3>

@@ -12,7 +12,8 @@ Version 1.0.0. Apache-2.0. Works on Splunk Enterprise 9.x/10.x and Splunk Cloud 
   1-minute resolution and every tile is calibrated for the "Last 24 hours" window; after a day without
   the streaming inputs the window slides into the 5-minute tier and the tiles drift by a few percent.
 - `make smoke` proves every dashboard search, the 14 headline KPIs and the alert coverage
-  (`make smoke SMOKE_FLAGS=--dispatch-alerts` re-fires the 25 alerts at the last incident).
+  (`make smoke SMOKE_FLAGS=--dispatch-alerts` re-fires the 25 alerts at the last incident, and the four AI Security alerts
+  at the newest incident whose day holds the scripted security storyline).
 - `make enable-es` turns on the four Enterprise Security rules; risk events carry the incident-day
   timestamps, so check `index=risk` with a window that covers that day (for example Last 7 days).
 - Dashboard PNG exports made with Dashboard Studio's Download > PNG live in `dist/screenshots/`.
@@ -198,7 +199,7 @@ Follow the deck bottom-up: six layer dashboards, then security in three beats, t
 ### 7.4 AI Applications (`ai_applications`)
 
 - **Takeaway.** "Users felt it as latency: p95 time-to-first-token went from 500 ms to 1.4 s between 13:00 and 15:00 while availability stayed at 99.93% for the day."
-- **Row to click.** `medadvice-chat | med-advisor-v41 | 7f3a9c1e04b2 | 1412 | timeout | flagged:hallucination` (top of "Recent AI Requests").
+- **Row to click.** `medadvice-chat | med-advisor-v41 | 7f3a9c1e04b2 | 1412 | timeout | flagged:hallucination` (fourth row of "Recent AI Requests" when the table is read at 15:00; after the incident, newer attention rows from any application come first).
 - **Drilldown SPL.** `index=ai_application host=ai-demo-generator trace_id="7f3a9c1e04b2" | table _time sourcetype gen_ai.app gen_ai.request.model ttft_ms retrieval_ms status guardrail verdict category gen_ai.agent.name`.
 - **What the audience sees.** The request, its guardrail event and (where applicable) the agent run joined on one `trace_id`: retrieval timed out against `vector-db-2`, the answer was flagged for hallucination, and nothing but hashes and lengths of the prompt was indexed.
 
@@ -259,7 +260,7 @@ The four security alerts write `ai:security:finding` events on their own. When S
 
 25 alerts in `default/savedsearches.conf`, all scheduled (every 5 minutes; every 15 minutes for the 7-day ones), email off, `alert.track=1`, each writing one `ai:alert` event per result to `index=ai_summary` through the built-in `logevent` action with `search_name`, `severity`, `layer`, `dashboard` and the key fields. Titles: `AI Infra - ECC or Xid faults on a GPU node` (high), `AI Infra - Thermal throttling sustained 15 min` (medium), `AI Infra - Idle GPU capacity above 30% for 24h` (low); `AI Network - Fabric congestion (ECN/PFC) on an AI POD link` (high), `AI Network - Link flapping on a GPU-facing port` (high), `AI Network - Configuration drift on an AI fabric switch` (medium); `AI Platform - Restart storm on an inference deployment` (high), `AI Platform - Inference queue build-up` (medium), `AI Platform - Evaluation or fine-tuning job failed` (medium); `AI Apps - p95 time-to-first-token regression` (high), `AI Apps - Error rate spike` (high), `AI Apps - Retrieval timeouts` (medium); `AI Models - Quality drift vs baseline` (medium), `AI Models - Safety compliance below policy band` (high), `AI Models - Evaluation regression on a release candidate` (medium); `AI Agents - Task completion drop` (medium), `AI Agents - Runaway loop detected` (high), `AI Agents - Guardrail surge` (high); `AI Cost - Daily spend spike by business unit` (medium), `AI Cost - Idle reservation above threshold` (low), `AI Cost - Runaway agent token spend` (medium); `AI Security - First-seen access to model weights` (critical), `AI Security - Credential misuse on an AI cluster` (high), `AI Security - Anomalous data movement from an AI data store` (high), `AI Security - Prompt-injection campaign from a single source` (high).
 
-Every window is anchored so the 14:55 scheduled run sees the daily incident; `make smoke SMOKE_FLAGS=--dispatch-alerts` force-dispatches each alert at the last incident's 14:55 with `trigger_actions=1` and then checks `index=ai_summary sourcetype=ai:alert | stats count by search_name` for all 25 names.
+Every window is anchored so the 14:55 scheduled run sees the daily incident; `make smoke SMOKE_FLAGS=--dispatch-alerts` force-dispatches each alert at the last incident's 14:55 with `trigger_actions=1` and then checks `index=ai_summary sourcetype=ai:alert | stats count by search_name` for all 25 names. The scripted security storyline (the seven findings, their raw events and the 59-attempt prompt-injection campaign) exists only on the day the backfill wrote as its latest day; the streaming inputs replay the incident every day but never add the storyline. The four AI Security alerts are therefore dispatched at 14:55 on the newest day, up to the last incident and within the last 7 days, whose data holds all four pieces they detect, and fail with "no anchor" when no such day exists.
 
 ## 11. Makefile reference
 
@@ -296,7 +297,7 @@ Run the whole suite after any change to the app and after every Splunk upgrade, 
 
 Keep a copy of `dist/smoke.txt`, `dist/smoke.json` and `dist/appinspect.json` from before an upgrade as the baseline. To compare a new Splunk version with that baseline over the same data, `tools/smoke_pinned.py <epoch>` reruns `smoke.py` read-only with every search pinned to one moment, and `tools/replay_alerts.py <anchor> ...` runs the 25 alert searches at chosen times without writing anything.
 
-The dispatch step anchors on the last incident's 14:55. The four AI Security alerts only have data on the generator's latest backfilled day, and the `ai_applications` table check depends on which row arrived last, so those checks can fail for reasons unrelated to a change (see the 2026-09-18 report).
+The dispatch step anchors on the last incident's 14:55, and the four AI Security alerts on the newest incident that holds the scripted security storyline (section 10). The `ai_applications` table check reads the table over the 24 hours that end at the last incident's 15:00 and requires the three scripted `medadvice-chat` rows among its attention rows. Both results therefore no longer depend on the time of day the suite runs (findings F2 and F3 of the 2026-09-18 report). `tools/smoke_pinned.py` passes its pin to `smoke.py --now`, so a pinned run uses the incident that was the last one at the pinned moment.
 
 Write each run up as `docs/testing/regression_<date>_<change>.md`; `make html` renders its HTML twin, and `docs/testing/` is not packaged. Raw logs go to `dist/regression/`. Reports so far:
 

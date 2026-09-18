@@ -14,6 +14,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 
 - `make package` leaves `docs/testing/` out of the package, and `make html` and `make validate` cover its Markdown files.
+- `tools/smoke_pinned.py` passes its pin to `smoke.py --now`, so a pinned run anchors on the incident that was the last one at that moment.
+
+### Fixed
+
+- `make smoke SMOKE_FLAGS=--dispatch-alerts` no longer fails the four AI Security dispatch checks when it runs after 15:05. The scripted security storyline only exists on the day the backfill wrote as its latest day, so those alerts are now dispatched at 14:55 on the newest day, up to the last incident and within 7 days, whose data holds all four pieces they detect. The other 21 alerts still fire at the last incident (regression report 2026-09-18, F2).
+- The `ai_applications` table check no longer depends on which application's attention row was indexed last. It reads the table over the 24 hours ending at the last incident's 15:00 and requires the three scripted `medadvice-chat` rows (`7f3a9c1e04b2`, `2c6e0b77d1f5`, `9d02b6f1c47a`) among its attention rows (F3).
+- `smoke.py --now <epoch>` sets the clock that decides which incident is the last one.
 
 ## [1.0.0] - 2026-09-18
 
