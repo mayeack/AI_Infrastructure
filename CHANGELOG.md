@@ -3,6 +3,18 @@
 All notable changes to `ai_infra_monitoring` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `docs/testing/regression_2026-09-18_splunk-10.4.3.md`: smoke test and full regression run after the Splunk Enterprise 10.4.0 to 10.4.3 upgrade. No app regressions.
+- `tools/smoke_pinned.py` reruns the smoke test read-only with every search pinned to one moment. `tools/replay_alerts.py` runs the 25 alert searches at chosen anchors without collecting or triggering actions.
+- README section 12, "Regression testing".
+
+### Changed
+
+- `make package` leaves `docs/testing/` out of the package, and `make html` and `make validate` cover its Markdown files.
+
 ## [1.0.0] - 2026-09-18
 
 ### Added

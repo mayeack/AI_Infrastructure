@@ -2,7 +2,7 @@
 
 `ai_infra_monitoring` is a self-contained Splunk app that demonstrates full-stack monitoring for enterprise AI: Cisco UCS servers, Cisco AI PODs and Cisco Nexus fabrics at the base, Kubernetes and inference serving in the middle, applications, models and agents on top, with cost and security cutting across every layer. It ships its own deterministic data generator, ten Dashboard Studio dashboards, 25 alerts, five scoreboards and one incident that recurs every day from 12:45 to 15:00 local time so "Last 24 hours" always tells the story.
 
-Version 1.0.0. Apache-2.0. Works on Splunk Enterprise 9.x/10.x and Splunk Cloud Platform (HEC mode). Requires no other app; Splunk Enterprise Security and the AI Toolkit are optional.
+Version 1.0.0. Apache-2.0. Works on Splunk Enterprise 9.x/10.x and Splunk Cloud Platform (HEC mode); last regression-tested on Splunk Enterprise 10.4.3 on 2026-09-18 (section 12). Requires no other app; Splunk Enterprise Security and the AI Toolkit are optional.
 
 ## Before the demo
 
@@ -266,7 +266,7 @@ Every window is anchored so the 14:55 scheduled run sees the daily incident; `ma
 | Target | What it does |
 |---|---|
 | `make all` | `validate`, `package`, `appinspect` |
-| `make package` | renders the HTML twins, rsyncs the app into `dist/` without `Makefile`, `tools/`, `dist/`, `local/`, `.env*` and dotfiles, sets 644/755, builds `dist/ai_infra_monitoring-1.0.0.tgz` with `COPYFILE_DISABLE=1`, fails if any hidden file is in the tarball |
+| `make package` | renders the HTML twins, rsyncs the app into `dist/` without `Makefile`, `tools/`, `dist/`, `local/`, `docs/testing/`, `.env*` and dotfiles, sets 644/755, builds `dist/ai_infra_monitoring-1.0.0.tgz` with `COPYFILE_DISABLE=1`, fails if any hidden file is in the tarball |
 | `make appinspect` | `splunk-appinspect inspect ... --mode precert --included-tags cloud`, writes `dist/appinspect.json`, fails on errors or failures, prints warnings |
 | `make validate` | `tools/validate_views.py` (view structure, tokens, nav order, wording, palette) plus `splunk btool check`, and confirms every `.md` has a fresh `.html` |
 | `make install` | rsync into `$SPLUNK_HOME/etc/apps` if needed, restart (REST with `.env` credentials, else the CLI), wait for `/services/server/info`, check the nine indexes |
@@ -282,7 +282,27 @@ Every window is anchored so the 14:55 scheduled run sees the daily incident; `ma
 
 `.env` keys: `SPLUNK_MGMT_URL` (default `https://127.0.0.1:8090`), `SPLUNK_TOKEN` or `SPLUNK_USERNAME`/`SPLUNK_PASSWORD`, `HEC_URL`, `AI_DEMO_HEC_TOKEN`. Overridable make variables: `SPLUNK_HOME`, `APPINSPECT`, `HEC_URL`, `SEED`, `BACKFILL_DAYS`, `SMOKE_FLAGS`.
 
-## 12. Cleanup
+## 12. Regression testing
+
+Run the whole suite after any change to the app and after every Splunk upgrade, in this order:
+
+| Step | Command | Passes when |
+|---|---|---|
+| Static checks, package, AppInspect | `make all` | `validate: OK`, `btool check: OK`, AppInspect reports 0 errors and 0 failures |
+| Generator self-check | `$SPLUNK_HOME/bin/splunk cmd python3 bin/ai_demo_generator.py --self-check --seed 20260916` | `39 KPIs, 0 failures` |
+| Live smoke with alert dispatch | `make smoke SMOKE_FLAGS=--dispatch-alerts` | `PASS 144/144` |
+| Platform checks after an upgrade | REST and SPL, listed in the latest report | the nine indexes and 25 feeds current, the 34 searches running, HEC healthy, no app errors in `splunkd.log` |
+| Dashboards in Splunk Web | open the ten views after logging in | every panel loads with no error state; `_audit` shows no failed `UI:dashboard:*` searches |
+
+Keep a copy of `dist/smoke.txt`, `dist/smoke.json` and `dist/appinspect.json` from before an upgrade as the baseline. To compare a new Splunk version with that baseline over the same data, `tools/smoke_pinned.py <epoch>` reruns `smoke.py` read-only with every search pinned to one moment, and `tools/replay_alerts.py <anchor> ...` runs the 25 alert searches at chosen times without writing anything.
+
+The dispatch step anchors on the last incident's 14:55. The four AI Security alerts only have data on the generator's latest backfilled day, and the `ai_applications` table check depends on which row arrived last, so those checks can fail for reasons unrelated to a change (see the 2026-09-18 report).
+
+Write each run up as `docs/testing/regression_<date>_<change>.md`; `make html` renders its HTML twin, and `docs/testing/` is not packaged. Raw logs go to `dist/regression/`. Reports so far:
+
+- `docs/testing/regression_2026-09-18_splunk-10.4.3.md`: Splunk Enterprise 10.4.0 to 10.4.3, no regressions.
+
+## 13. Cleanup
 
 ```
 index IN (ai_infra_metrics,ai_infra,ai_network,ai_platform,ai_application,ai_model_eval,ai_cost,ai_security,ai_summary) host=ai-demo-generator | delete
@@ -292,4 +312,4 @@ index IN (ai_infra_metrics,ai_infra,ai_network,ai_platform,ai_application,ai_mod
 
 ## Files
 
-`default/` (app, indexes, inputs, props, transforms, eventtypes, tags, macros, savedsearches, nav, ten views), `metadata/default.meta`, `lookups/` (five CSVs), `bin/` (`ai_demo_generator.py`, `backfill.sh`, `hec_setup.md`), `static/` (icons), `docs/field_reference.md` (every sourcetype and field), `CHANGELOG.md`, `LICENSE`. Build-only, not packaged: `Makefile`, `tools/`, `dist/`, `.env`.
+`default/` (app, indexes, inputs, props, transforms, eventtypes, tags, macros, savedsearches, nav, ten views), `metadata/default.meta`, `lookups/` (five CSVs), `bin/` (`ai_demo_generator.py`, `backfill.sh`, `hec_setup.md`), `static/` (icons), `docs/field_reference.md` (every sourcetype and field), `CHANGELOG.md`, `LICENSE`. Build-only, not packaged: `Makefile`, `tools/`, `docs/testing/` (regression reports), `dist/`, `.env`.

@@ -22,6 +22,17 @@ li{margin:.2em 0}
 </style></head><body><main>
 <h1>Changelog</h1>
 <p>All notable changes to <code>ai_infra_monitoring</code> are documented here. The format follows <a href="https://keepachangelog.com/en/1.1.0/">Keep a Changelog</a> and the project uses <a href="https://semver.org/">Semantic Versioning</a>.</p>
+<h2>[Unreleased]</h2>
+<h3>Added</h3>
+<ul>
+<li><code>docs/testing/regression_2026-09-18_splunk-10.4.3.md</code>: smoke test and full regression run after the Splunk Enterprise 10.4.0 to 10.4.3 upgrade. No app regressions.</li>
+<li><code>tools/smoke_pinned.py</code> reruns the smoke test read-only with every search pinned to one moment. <code>tools/replay_alerts.py</code> runs the 25 alert searches at chosen anchors without collecting or triggering actions.</li>
+<li>README section 12, "Regression testing".</li>
+</ul>
+<h3>Changed</h3>
+<ul>
+<li><code>make package</code> leaves <code>docs/testing/</code> out of the package, and <code>make html</code> and <code>make validate</code> cover its Markdown files.</li>
+</ul>
 <h2>[1.0.0] - 2026-09-18</h2>
 <h3>Added</h3>
 <ul>

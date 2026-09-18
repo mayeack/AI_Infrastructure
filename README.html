@@ -22,7 +22,7 @@ li{margin:.2em 0}
 </style></head><body><main>
 <h1>AI Infrastructure Monitoring</h1>
 <p><code>ai_infra_monitoring</code> is a self-contained Splunk app that demonstrates full-stack monitoring for enterprise AI: Cisco UCS servers, Cisco AI PODs and Cisco Nexus fabrics at the base, Kubernetes and inference serving in the middle, applications, models and agents on top, with cost and security cutting across every layer. It ships its own deterministic data generator, ten Dashboard Studio dashboards, 25 alerts, five scoreboards and one incident that recurs every day from 12:45 to 15:00 local time so "Last 24 hours" always tells the story.</p>
-<p>Version 1.0.0. Apache-2.0. Works on Splunk Enterprise 9.x/10.x and Splunk Cloud Platform (HEC mode). Requires no other app; Splunk Enterprise Security and the AI Toolkit are optional.</p>
+<p>Version 1.0.0. Apache-2.0. Works on Splunk Enterprise 9.x/10.x and Splunk Cloud Platform (HEC mode); last regression-tested on Splunk Enterprise 10.4.3 on 2026-09-18 (section 12). Requires no other app; Splunk Enterprise Security and the AI Toolkit are optional.</p>
 <h2>Before the demo</h2>
 <ul>
 <li>The 7-day security tiles (Model Asset Access Anomalies, Credential Misuse, Data Movement Alerts, Prompt Injections Detected) count the last seven complete days (<code>latest=@d</code> inside their macros), so they read the same all day.</li>
@@ -232,7 +232,7 @@ bin/ai_demo_generator.py --stream   --hec https://&lt;stack&gt;.splunkcloud.com:
 <h2>11. Makefile reference</h2>
 <table><thead><tr><th>Target</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>make all</code></td><td><code>validate</code>, <code>package</code>, <code>appinspect</code></td></tr>
-<tr><td><code>make package</code></td><td>renders the HTML twins, rsyncs the app into <code>dist/</code> without <code>Makefile</code>, <code>tools/</code>, <code>dist/</code>, <code>local/</code>, <code>.env*</code> and dotfiles, sets 644/755, builds <code>dist/ai_infra_monitoring-1.0.0.tgz</code> with <code>COPYFILE_DISABLE=1</code>, fails if any hidden file is in the tarball</td></tr>
+<tr><td><code>make package</code></td><td>renders the HTML twins, rsyncs the app into <code>dist/</code> without <code>Makefile</code>, <code>tools/</code>, <code>dist/</code>, <code>local/</code>, <code>docs/testing/</code>, <code>.env*</code> and dotfiles, sets 644/755, builds <code>dist/ai_infra_monitoring-1.0.0.tgz</code> with <code>COPYFILE_DISABLE=1</code>, fails if any hidden file is in the tarball</td></tr>
 <tr><td><code>make appinspect</code></td><td><code>splunk-appinspect inspect ... --mode precert --included-tags cloud</code>, writes <code>dist/appinspect.json</code>, fails on errors or failures, prints warnings</td></tr>
 <tr><td><code>make validate</code></td><td><code>tools/validate_views.py</code> (view structure, tokens, nav order, wording, palette) plus <code>splunk btool check</code>, and confirms every <code>.md</code> has a fresh <code>.html</code></td></tr>
 <tr><td><code>make install</code></td><td>rsync into <code>$SPLUNK_HOME/etc/apps</code> if needed, restart (REST with <code>.env</code> credentials, else the CLI), wait for <code>/services/server/info</code>, check the nine indexes</td></tr>
@@ -247,9 +247,24 @@ bin/ai_demo_generator.py --stream   --hec https://&lt;stack&gt;.splunkcloud.com:
 <tr><td><code>make clean</code></td><td>deletes the demo data (<code>host=ai-demo-generator</code>, needs <code>can_delete</code>) and the build outputs</td></tr>
 </tbody></table>
 <p><code>.env</code> keys: <code>SPLUNK_MGMT_URL</code> (default <code>https://127.0.0.1:8090</code>), <code>SPLUNK_TOKEN</code> or <code>SPLUNK_USERNAME</code>/<code>SPLUNK_PASSWORD</code>, <code>HEC_URL</code>, <code>AI_DEMO_HEC_TOKEN</code>. Overridable make variables: <code>SPLUNK_HOME</code>, <code>APPINSPECT</code>, <code>HEC_URL</code>, <code>SEED</code>, <code>BACKFILL_DAYS</code>, <code>SMOKE_FLAGS</code>.</p>
-<h2>12. Cleanup</h2>
+<h2>12. Regression testing</h2>
+<p>Run the whole suite after any change to the app and after every Splunk upgrade, in this order:</p>
+<table><thead><tr><th>Step</th><th>Command</th><th>Passes when</th></tr></thead><tbody>
+<tr><td>Static checks, package, AppInspect</td><td><code>make all</code></td><td><code>validate: OK</code>, <code>btool check: OK</code>, AppInspect reports 0 errors and 0 failures</td></tr>
+<tr><td>Generator self-check</td><td><code>$SPLUNK_HOME/bin/splunk cmd python3 bin/ai_demo_generator.py --self-check --seed 20260916</code></td><td><code>39 KPIs, 0 failures</code></td></tr>
+<tr><td>Live smoke with alert dispatch</td><td><code>make smoke SMOKE_FLAGS=--dispatch-alerts</code></td><td><code>PASS 144/144</code></td></tr>
+<tr><td>Platform checks after an upgrade</td><td>REST and SPL, listed in the latest report</td><td>the nine indexes and 25 feeds current, the 34 searches running, HEC healthy, no app errors in <code>splunkd.log</code></td></tr>
+<tr><td>Dashboards in Splunk Web</td><td>open the ten views after logging in</td><td>every panel loads with no error state; <code>_audit</code> shows no failed <code>UI:dashboard:*</code> searches</td></tr>
+</tbody></table>
+<p>Keep a copy of <code>dist/smoke.txt</code>, <code>dist/smoke.json</code> and <code>dist/appinspect.json</code> from before an upgrade as the baseline. To compare a new Splunk version with that baseline over the same data, <code>tools/smoke_pinned.py &lt;epoch&gt;</code> reruns <code>smoke.py</code> read-only with every search pinned to one moment, and <code>tools/replay_alerts.py &lt;anchor&gt; ...</code> runs the 25 alert searches at chosen times without writing anything.</p>
+<p>The dispatch step anchors on the last incident's 14:55. The four AI Security alerts only have data on the generator's latest backfilled day, and the <code>ai_applications</code> table check depends on which row arrived last, so those checks can fail for reasons unrelated to a change (see the 2026-09-18 report).</p>
+<p>Write each run up as <code>docs/testing/regression_&lt;date&gt;_&lt;change&gt;.md</code>; <code>make html</code> renders its HTML twin, and <code>docs/testing/</code> is not packaged. Raw logs go to <code>dist/regression/</code>. Reports so far:</p>
+<ul>
+<li><code>docs/testing/regression_2026-09-18_splunk-10.4.3.md</code>: Splunk Enterprise 10.4.0 to 10.4.3, no regressions.</li>
+</ul>
+<h2>13. Cleanup</h2>
 <pre><code>index IN (ai_infra_metrics,ai_infra,ai_network,ai_platform,ai_application,ai_model_eval,ai_cost,ai_security,ai_summary) host=ai-demo-generator | delete</code></pre>
 <p><code>make clean</code> runs that search (the account needs the <code>can_delete</code> capability; metrics indexes accept <code>delete</code> on Splunk Enterprise 9.1 and later) and removes <code>dist/</code>. Disable the scripted inputs (<code>local/inputs.conf</code>) and the <code>ai_infra_demo</code> HEC token if you no longer want new data. The <code>ai_application</code> index name is shared with other GenAI content on purpose; the <code>host=ai-demo-generator</code> filter keeps this app's events separable.</p>
 <h2>Files</h2>
-<p><code>default/</code> (app, indexes, inputs, props, transforms, eventtypes, tags, macros, savedsearches, nav, ten views), <code>metadata/default.meta</code>, <code>lookups/</code> (five CSVs), <code>bin/</code> (<code>ai_demo_generator.py</code>, <code>backfill.sh</code>, <code>hec_setup.md</code>), <code>static/</code> (icons), <code>docs/field_reference.md</code> (every sourcetype and field), <code>CHANGELOG.md</code>, <code>LICENSE</code>. Build-only, not packaged: <code>Makefile</code>, <code>tools/</code>, <code>dist/</code>, <code>.env</code>.</p>
+<p><code>default/</code> (app, indexes, inputs, props, transforms, eventtypes, tags, macros, savedsearches, nav, ten views), <code>metadata/default.meta</code>, <code>lookups/</code> (five CSVs), <code>bin/</code> (<code>ai_demo_generator.py</code>, <code>backfill.sh</code>, <code>hec_setup.md</code>), <code>static/</code> (icons), <code>docs/field_reference.md</code> (every sourcetype and field), <code>CHANGELOG.md</code>, <code>LICENSE</code>. Build-only, not packaged: <code>Makefile</code>, <code>tools/</code>, <code>docs/testing/</code> (regression reports), <code>dist/</code>, <code>.env</code>.</p>
 </main></body></html>
